@@ -1,0 +1,18 @@
+# Personal dashcam data (never commit)
+working_data/
+merged_videos/
+data/trips.json
+data/merge_report.txt
+videos/
+
+# macOS / tooling
+.DS_Store
+src/__pycache__/
+*.pyc
+backup/
+.claude/
+
+# Large binary files
+*.mp4
+*.tar
+*.git  # dashcam TAR archives have .git extension

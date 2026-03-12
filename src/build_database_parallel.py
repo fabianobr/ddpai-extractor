@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""
+DDpai Database Builder — Parallel variant.
+Imports all logic from build_database.py; only main() is overridden with threading.
+"""
+import sys
+import os
+import json
+import glob
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Import everything from the original sequential script
+sys.path.insert(0, os.path.dirname(__file__))
+from build_database import (
+    parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
+    discover_videos, validate_group, compute_trip_stats,
+    merge_videos, save_merge_report,
+    WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
+    OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
+    OUTPUT_HEIGHT, VIDEO_CRF, VIDEO_PRESET
+)
+
+# ============================================================================
+# Thread-safe printing
+# ============================================================================
+
+_PRINT_LOCK = threading.Lock()
+
+def locked_print(*args, **kwargs):
+    """Thread-safe print using a lock."""
+    with _PRINT_LOCK:
+        print(*args, **kwargs)
+
+# ============================================================================
+# Per-group processing
+# ============================================================================
+
+def process_group(group_idx, group, total_groups, inner_executor):
+    """
+    Process one trip group in parallel.
+
+    Args:
+        group_idx: 1-based group index
+        group: list of TAR file paths for this group
+        total_groups: total number of groups (for progress display)
+        inner_executor: ThreadPoolExecutor for rear+front video merging
+
+    Returns:
+        (group_data_dict | None, merge_debug_lines)
+    """
+    group_merge_info = []
+
+    # Parse the first TAR file to get group ID
+    start_utc, _ = parse_tar_filename(group[0])
+    if start_utc is None:
+        return None, group_merge_info
+
+    group_id = start_utc.strftime('%Y%m%d%H%M%S')
+    date_str = start_utc.strftime('%Y-%m-%d')
+
+    locked_print(f"Group {group_idx}/{total_groups}: {len(group)} archives | ID: {group_id}")
+
+    # ========== Extract GPS ==========
+    all_points = []
+    for tar_path in group:
+        all_points.extend(extract_gps_from_tar(tar_path))
+
+    if not all_points:
+        locked_print(f"  [{group_id}] ⚠️  SKIP: no GPS data")
+        return None, group_merge_info
+
+    locked_print(f"  [{group_id}] 📍 {len(all_points)} GPS points")
+
+    # ========== Discover videos ==========
+    rear_videos = discover_videos(group, camera='rear')
+    front_videos = discover_videos(group, camera='front')
+    locked_print(f"  [{group_id}] 🎥 {len(rear_videos)} rear, {len(front_videos)} front")
+
+    # ========== Validate group ==========
+    errors = validate_group(all_points, rear_videos, front_videos)
+    if errors:
+        locked_print(f"  [{group_id}] ⚠️  SKIP: {'; '.join(errors)}")
+        return None, group_merge_info
+
+    locked_print(f"  [{group_id}] ✅ Validation passed")
+
+    # ========== Compute stats ==========
+    stats = compute_trip_stats(all_points)
+    locked_print(f"  [{group_id}] 📊 {stats['distance_km']} km | {stats['duration_min']} min | max {stats['max_speed']} km/h")
+
+    # ========== Merge videos in parallel (rear + front) ==========
+    rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
+    front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
+
+    locked_print(f"  [{group_id}] 🎬 Merging rear + front in parallel...")
+
+    # Submit both rear and front merges to the inner executor
+    fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear')
+    fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front')
+
+    # Wait for both to complete
+    rear_ok, rear_debug = fut_rear.result()
+    front_ok, front_debug = fut_front.result()
+
+    # Collect debug output with thread safety
+    with _PRINT_LOCK:
+        for line in rear_debug + front_debug:
+            print(line, flush=True)
+
+    group_merge_info.extend(rear_debug)
+    group_merge_info.extend(front_debug)
+
+    if not (rear_ok and front_ok):
+        locked_print(f"  [{group_id}] ⚠️  SKIP: video merge failed")
+        return None, group_merge_info
+
+    # ========== Build result dict ==========
+    end_date = start_utc + timedelta(minutes=stats['duration_min'])
+    label = f"{start_utc.strftime('%b %d')} {start_utc.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
+
+    locked_print(f"  [{group_id}] ✅ Done")
+
+    return {
+        'id': group_id,
+        'label': label,
+        'date': date_str,
+        'duration_min': stats['duration_min'],
+        'distance_km': stats['distance_km'],
+        'max_speed': stats['max_speed'],
+        'avg_speed': stats['avg_speed'],
+        'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']] for p in all_points],
+        'video_rear': f'merged_videos/{group_id}_rear.mp4',
+        'video_front': f'merged_videos/{group_id}_front.mp4',
+    }, group_merge_info
+
+# ============================================================================
+# Main (parallel version)
+# ============================================================================
+
+def main():
+    print("=" * 80)
+    print("🎬 DDpai Database Builder (PARALLEL)")
+    print("=" * 80)
+    print()
+
+    # Step 1: Find all .git files
+    print("Step 1: Discovering .git archives...")
+    tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
+    print(f"  Found {len(tar_files)} archives")
+    print()
+
+    # Step 2: Detect trip groups
+    print("Step 2: Detecting trip groups (30-min gap threshold)...")
+    groups = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} trip groups")
+    print()
+
+    # Step 3: Process groups in parallel
+    print("Step 3: Processing groups in parallel...")
+    print()
+
+    MAX_OUTER_WORKERS = min(len(groups), 4)  # Cap at 4 concurrent groups
+    MAX_INNER_WORKERS = 2                    # Always 2 (rear + front per group)
+
+    groups_data = [None] * len(groups)       # Pre-sized to preserve order
+    all_merge_info = []
+    valid_count = 0
+
+    report_file = os.path.join(OUTPUT_DIR, 'data', 'merge_report.txt')
+    report_lines = [
+        "VIDEO MERGE DEBUG REPORT (PARALLEL)",
+        "=" * 80,
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        f"TAR Directory: {WORKING_DIR}",
+        f"Rear Videos: {VIDEO_DIR_REAR}",
+        f"Front Videos: {VIDEO_DIR_FRONT}",
+        f"Output Directory: {OUTPUT_DIR}",
+        f"Workers: outer={MAX_OUTER_WORKERS}, inner={MAX_INNER_WORKERS}",
+        "=" * 80,
+    ]
+
+    # Create nested executors: outer for groups, inner for rear+front per group
+    with ThreadPoolExecutor(max_workers=MAX_INNER_WORKERS, thread_name_prefix='merge') as inner_ex:
+        with ThreadPoolExecutor(max_workers=MAX_OUTER_WORKERS, thread_name_prefix='group') as outer_ex:
+
+            # Submit all groups to the outer executor
+            future_to_idx = {
+                outer_ex.submit(process_group, idx + 1, group, len(groups), inner_ex): idx
+                for idx, group in enumerate(groups)
+            }
+
+            # Collect results as they complete (not necessarily in order)
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    group_data, merge_info = future.result()
+                except Exception as exc:
+                    locked_print(f"  Group {idx + 1} error: {exc}")
+                    group_data, merge_info = None, []
+
+                all_merge_info.extend(merge_info)
+                if group_data is not None:
+                    groups_data[idx] = group_data
+                    valid_count += 1
+
+    # Remove None slots to get final list in original order
+    groups_data = [g for g in groups_data if g is not None]
+
+    print()
+    print("Step 4: Writing database...")
+
+    if not groups_data:
+        print("  ❌ No valid groups!")
+        return 1
+
+    os.makedirs(os.path.dirname(OUTPUT_JSON), exist_ok=True)
+    with open(OUTPUT_JSON, 'w') as f:
+        json.dump({
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'trips': groups_data
+        }, f)
+
+    file_size_kb = os.path.getsize(OUTPUT_JSON) / 1024
+    print(f"  ✅ Database created: {OUTPUT_JSON} ({file_size_kb:.1f} KB)")
+    print()
+
+    # Save merge report
+    report_lines.extend(all_merge_info)
+    save_merge_report(report_file, report_lines)
+    print(f"  📋 Merge report saved: {report_file}")
+    print()
+
+    # Summary
+    print("=" * 80)
+    print(f"✅ SUCCESS: {valid_count}/{len(groups)} groups included")
+    print(f"   Workers: outer={MAX_OUTER_WORKERS}, inner={MAX_INNER_WORKERS}")
+    print()
+    print("Next: Run ./run.sh to start the app")
+    print("=" * 80)
+
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

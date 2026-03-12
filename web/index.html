@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDpai Dashboard - Multi-Trip Analysis</title>
+    <link rel="icon" type="image/x-icon" href="../favicon.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 8px;
+            color: white;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .trip-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .trip-item:hover {
+            background: #f9f9f9;
+        }
+
+        .trip-item.active {
+            background: #667eea;
+            color: white;
+            border-left: 4px solid #764ba2;
+        }
+
+        .trip-date {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .trip-meta {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        #map {
+            width: 100%;
+            height: 500px;
+            border-radius: 6px;
+        }
+
+        .charts {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+            height: 240px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .videos-section {
+            grid-column: 1 / -1;
+        }
+
+        .videos-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .video-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .video-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .video-badge {
+            background: #FF6B6B;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .video-card video {
+            width: 100%;
+            height: auto;
+            background: #000;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .video-path {
+            font-size: 11px;
+            color: #999;
+            padding: 10px;
+            background: #fafafa;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        @media (max-width: 1024px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+            .content, .videos-grid {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">🎬 DDpai Dashboard</div>
+            <div class="subtitle">Florianópolis, Brazil • Multiple Trips (UTC-3)</div>
+        </div>
+
+        <div id="app-content">
+            <div class="loading">📊 Loading database...</div>
+        </div>
+    </div>
+
+    <script>
+        let speedChart = null;
+        let altitudeChart = null;
+        let currentMap = null;
+        let currentPolyline = null;
+
+        async function loadDatabase() {
+            try {
+                const res = await fetch('../data/trips.json');
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                const db = await res.json();
+                return db.trips || [];
+            } catch (error) {
+                throw new Error(`Failed to load database: ${error.message}`);
+            }
+        }
+
+        function renderApp(GROUPS) {
+            const appContent = document.getElementById('app-content');
+
+            if (GROUPS.length === 0) {
+                appContent.innerHTML = '<div class="error">No trips found. Run: ./build.sh</div>';
+                return;
+            }
+
+            appContent.innerHTML = `
+                <div class="main">
+                    <div class="sidebar" id="trips-list"></div>
+
+                    <div class="content">
+                        <div class="card">
+                            <div id="map"></div>
+                        </div>
+
+                        <div class="charts">
+                            <div class="chart-container">
+                                <div class="chart-title">Speed Profile (km/h)</div>
+                                <canvas id="chart-speed"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <div class="chart-title">Altitude Profile (meters)</div>
+                                <canvas id="chart-altitude"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="videos-section">
+                    <div class="videos-grid">
+                        <div class="video-card">
+                            <h3>📹 Rear Camera <span class="video-badge" id="rear-badge">--</span></h3>
+                            <video id="video-rear" controls width="100%">
+                                Your browser doesn't support HTML5 video.
+                            </video>
+                            <div class="video-path">📂 <span id="rear-path">-</span></div>
+                        </div>
+
+                        <div class="video-card">
+                            <h3>📹 Front Camera <span class="video-badge" id="front-badge">--</span></h3>
+                            <video id="video-front" controls width="100%">
+                                Your browser doesn't support HTML5 video.
+                            </video>
+                            <div class="video-path">📂 <span id="front-path">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            renderTripList(GROUPS);
+            if (GROUPS.length > 0) {
+                selectTrip(GROUPS, 0);
+            }
+        }
+
+        function renderTripList(GROUPS) {
+            const list = document.getElementById('trips-list');
+            list.innerHTML = '';
+
+            GROUPS.forEach((group, idx) => {
+                const item = document.createElement('div');
+                item.className = 'trip-item' + (idx === 0 ? ' active' : '');
+                item.innerHTML = `
+                    <div class="trip-date">${group.label}</div>
+                    <div class="trip-meta">${group.distance_km} km • ${group.duration_min} min</div>
+                `;
+                item.onclick = () => selectTrip(GROUPS, idx);
+                list.appendChild(item);
+            });
+        }
+
+        function selectTrip(GROUPS, idx) {
+            const group = GROUPS[idx];
+
+            // Update sidebar
+            document.querySelectorAll('.trip-item').forEach((el, i) => {
+                el.classList.toggle('active', i === idx);
+            });
+
+            // Update map
+            updateMap(group.points);
+
+            // Update charts
+            updateCharts(group.points);
+
+            // Update videos
+            updateVideos(group, idx);
+        }
+
+        function updateMap(points) {
+            if (!currentMap) {
+                currentMap = L.map('map').setView([-27.5, -48.5], 11);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(currentMap);
+            }
+
+            // Remove old polyline
+            if (currentPolyline) {
+                currentMap.removeLayer(currentPolyline);
+            }
+
+            // Draw new route
+            const coords = points.map(p => [p[0], p[1]]);
+            currentPolyline = L.polyline(coords, {
+                color: '#667eea',
+                weight: 3,
+                opacity: 0.8
+            });
+            currentPolyline.addTo(currentMap);
+
+            const bounds = L.latLngBounds(coords);
+            currentMap.fitBounds(bounds, {padding: [50, 50]});
+        }
+
+        function updateCharts(points) {
+            const speeds = points.map(p => p[2]);
+            const altitudes = points.map(p => p[3]);
+            const labels = Array.from({length: points.length}, (_, i) => i);
+
+            if (speedChart) {
+                speedChart.destroy();
+            }
+            if (altitudeChart) {
+                altitudeChart.destroy();
+            }
+
+            const ctx1 = document.getElementById('chart-speed').getContext('2d');
+            speedChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Speed (km/h)',
+                        data: speeds,
+                        borderColor: '#FF6B6B',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {legend: {display: false}},
+                    scales: {
+                        y: {beginAtZero: true},
+                        x: {display: false}
+                    }
+                }
+            });
+
+            const ctx2 = document.getElementById('chart-altitude').getContext('2d');
+            altitudeChart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Altitude (m)',
+                        data: altitudes,
+                        borderColor: '#4ECDC4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {legend: {display: false}},
+                    scales: {x: {display: false}}
+                }
+            });
+        }
+
+        function updateVideos(group, idx) {
+            const rearVideo = document.getElementById('video-rear');
+            const frontVideo = document.getElementById('video-front');
+
+            rearVideo.src = '../' + group.video_rear;
+            frontVideo.src = '../' + group.video_front;
+
+            document.getElementById('rear-path').textContent = group.video_rear;
+            document.getElementById('front-path').textContent = group.video_front;
+
+            const badge = `${Math.round(group.duration_min)} MIN`;
+            document.getElementById('rear-badge').textContent = badge;
+            document.getElementById('front-badge').textContent = badge;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const GROUPS = await loadDatabase();
+                renderApp(GROUPS);
+
+                // Resize charts on window resize
+                window.addEventListener('resize', () => {
+                    if (speedChart) speedChart.resize();
+                    if (altitudeChart) altitudeChart.resize();
+                });
+            } catch (error) {
+                document.getElementById('app-content').innerHTML =
+                    `<div class="error">${error.message}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
