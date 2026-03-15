@@ -708,22 +708,6 @@ def main():
         for line in video_warnings:
             print(f"     {line}")
 
-        if video_has_errors and not rear_videos and not front_videos:
-            print(f"  ⚠️  Skipping group {group_id} (no videos available)")
-            print()
-            report_lines.append(f"\nGROUP: {group_id} - SKIPPED (no videos)")
-            for line in video_warnings:
-                report_lines.append(f"  {line}")
-            continue
-
-        if video_has_errors and (not rear_videos or not front_videos):
-            print(f"  ⚠️  Skipping group {group_id} (missing rear or front videos)")
-            print()
-            report_lines.append(f"\nGROUP: {group_id} - SKIPPED (missing rear/front)")
-            for line in video_warnings:
-                report_lines.append(f"  {line}")
-            continue
-
         print(f"  ✅ GPS validation passed - proceeding with video merge")
 
         # Compute stats
@@ -732,6 +716,12 @@ def main():
         print(f"    • Duration: {stats['duration_min']} min")
         print(f"    • Max speed: {stats['max_speed']} km/h")
         print(f"    • Avg speed: {stats['avg_speed']} km/h")
+
+        # Initialize video merge status variables (will be updated below)
+        rear_ok = False
+        front_ok = False
+        video_status = "no_videos"
+        video_notes = "No video files found for either camera"
 
         # Smart video merge: implement min() count strategy
         print("  🎬 Smart merge strategy...")
@@ -772,35 +762,51 @@ def main():
                     print(line, flush=True)
                 all_merge_info.extend(front_debug)
 
-            # Determine merge status
+            # Determine merge status and notes
             if rear_ok and front_ok:
                 if rear_count != front_count:
+                    extra_count = abs(rear_count - front_count)
+                    video_status = "ok_with_extras"
+                    video_notes = f"Merged {merge_count} rear + {merge_count} front videos ({extra_count} extra video(s) ignored)"
                     print(f"    ✅ Merged: {os.path.basename(rear_output)}, {os.path.basename(front_output)}")
-                    print(f"       ({merge_count} pairs, {abs(rear_count - front_count)} extra video(s) ignored)")
+                    print(f"       ({merge_count} pairs, {extra_count} extra video(s) ignored)")
                 else:
+                    video_status = "ok"
+                    video_notes = f"Merged {merge_count} rear + {merge_count} front videos successfully"
                     print(f"    ✅ Merged: {os.path.basename(rear_output)}, {os.path.basename(front_output)}")
             else:
-                print(f"  ⚠️  Skipping group {group_id}: Video merge failed")
-                print()
-                continue
+                # At least one merge failed - record what happened
+                if not rear_ok and not front_ok:
+                    video_status = "merge_failed"
+                    video_notes = "Both rear and front video merges failed"
+                elif not rear_ok:
+                    video_status = "merge_failed_rear"
+                    video_notes = f"Rear video merge failed ({rear_count} rear, {front_count} front files)"
+                else:
+                    video_status = "merge_failed_front"
+                    video_notes = f"Front video merge failed ({rear_count} rear, {front_count} front files)"
 
-        elif rear_count > 0:
-            # Only rear videos - skip
-            print(f"  ⚠️  Skipping group {group_id}: No front videos ({rear_count} rear available)")
-            print()
-            continue
+                print(f"  ⚠️  Video merge failed for group {group_id}, but GPS data is valid")
+                print(f"     Status: {video_status}")
+                print(f"     Note: {video_notes}")
 
-        elif front_count > 0:
-            # Only front videos - skip
-            print(f"  ⚠️  Skipping group {group_id}: No rear videos ({front_count} front available)")
-            print()
-            continue
+        elif rear_count > 0 and front_count == 0:
+            # Only rear videos - record as partial
+            video_status = "no_front"
+            video_notes = f"Only rear videos available ({rear_count} rear, 0 front)"
+            print(f"  ⚠️  No front videos for group {group_id} ({rear_count} rear available), but GPS data is valid")
+
+        elif front_count > 0 and rear_count == 0:
+            # Only front videos - record as partial
+            video_status = "no_rear"
+            video_notes = f"Only front videos available (0 rear, {front_count} front)"
+            print(f"  ⚠️  No rear videos for group {group_id} ({front_count} front available), but GPS data is valid")
 
         else:
-            # No videos at all - skip
-            print(f"  ⚠️  Skipping group {group_id}: No videos found for either camera")
-            print()
-            continue
+            # No videos at all - but GPS is valid so we include the trip
+            video_status = "no_videos"
+            video_notes = "No video files found for either camera"
+            print(f"  ⚠️  No videos for group {group_id}, but GPS data is valid")
 
         # Calculate time range
         start_date = datetime.strptime(group_id, '%Y%m%d%H%M%S')
@@ -814,6 +820,10 @@ def main():
             for p in all_points
         ]
 
+        # Build video paths based on merge success
+        video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
+        video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
+
         # Add to groups data
         groups_data.append({
             'id': group_id,
@@ -824,8 +834,10 @@ def main():
             'max_speed': stats['max_speed'],
             'avg_speed': stats['avg_speed'],
             'points': points_for_db,
-            'video_rear': f'merged_videos/{group_id}_rear.mp4',
-            'video_front': f'merged_videos/{group_id}_front.mp4'
+            'video_rear': video_rear_path,
+            'video_front': video_front_path,
+            'video_status': video_status,
+            'video_notes': video_notes
         })
 
         valid_count += 1
