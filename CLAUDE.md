@@ -24,21 +24,62 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 ./watch.sh --parallel  # Parallel build (2.5-3.5x faster)
 ```
 
-## ⚠️ MUST DO: Development Workflow
+## ⚠️ MUST DO: Development Workflow (Git Flow + TDD)
 
-**All changes to this project MUST follow this workflow:**
+**🔴 ALL changes to this project MUST follow this exact workflow — NO EXCEPTIONS:**
 
-1. **Branch:** Create a feature branch (do NOT commit to main directly)
-2. **Test:** Write tests first (TDD), verify all tests pass
-3. **Code:** Implement changes, run tests to confirm passing
-4. **PR:** Push branch and create a Pull Request on GitHub
-5. **Review:** Get approval before merging to main
-6. **Merge:** Merge via GitHub (never force-push)
-7. **Sync:** After merge to main, sync develop branch: `git checkout develop && git merge main && git push origin develop && git checkout main`
+1. **Branch:** Create a feature branch from `develop` (format: `feature/*`)
+   - ✅ DO: `git checkout -b feature/video-sync-gps`
+   - ❌ DON'T: Commit directly to main or develop
 
-**Why:** This ensures code quality, test coverage, a clean git history, and keeps develop branch in sync with main after each release.
+2. **Test:** Write tests FIRST (Test-Driven Development)
+   - ✅ DO: Create `tests/` directory with test cases before implementation
+   - ✅ DO: Run tests locally: `pytest` or `bash tests/test_*.sh`
+   - ❌ DON'T: Write code without tests
 
-**For Claude Code:** Use `/verify-before-completion` skill before marking work done.
+3. **Code:** Implement changes, confirm all tests pass
+   - ✅ DO: Follow commit message conventions (see CONTRIBUTING.md)
+   - ✅ DO: Keep changes focused (one feature per PR)
+   - ❌ DON'T: Mix multiple features in one commit
+
+4. **PR:** Push branch and create Pull Request on GitHub
+   - ✅ DO: Push with: `git push -u origin feature/your-name`
+   - ✅ DO: Link PR to GitHub Projects board
+   - ❌ DON'T: Merge directly without PR review
+
+5. **Review:** Get approval from project owner before merging
+   - ✅ DO: Wait for code review feedback
+   - ✅ DO: Fix review comments in new commits (don't amend)
+   - ✅ DO: Use `/verify-before-completion` skill to confirm work is ready
+   - ❌ DON'T: Self-approve or force-merge
+
+6. **Merge:** Merge via GitHub UI (squash or rebase to keep history clean)
+   - ✅ DO: Merge through GitHub interface
+   - ✅ DO: Delete feature branch after merge
+   - ❌ DON'T: Use force-push (`git push --force`)
+   - ❌ DON'T: Merge to main directly (use develop first)
+
+7. **Sync:** After merge to main, sync develop branch
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git merge main
+   git push origin develop
+   git checkout main
+   ```
+
+**Why This Matters:**
+- ✅ Code quality & test coverage before production
+- ✅ Clean git history (easy to revert if needed)
+- ✅ Prevents conflicts between main/develop
+- ✅ Every commit is deployable
+- ✅ Easy code review & knowledge sharing
+
+**For Claude Code Users:**
+- 🔴 **MUST** use `/verify-before-completion` skill before marking work done
+- 🔴 **MUST** follow TDD: tests first, then code
+- 🔴 **MUST** create feature branches (never commit to main/develop directly)
+- 🔴 **MUST** use Conventional Commits for clear history
 
 ## Architecture & Workflow
 

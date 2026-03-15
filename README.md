@@ -167,7 +167,21 @@ The project gracefully ignores corrupted TAR files and bad NMEA checksums. Check
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions, commit style, and release process.
+**Before submitting any changes, read the [CONTRIBUTING.md](docs/CONTRIBUTING.md) guide carefully.**
+
+### 🔴 MUST DO Requirements
+
+**ALL contributions MUST follow these rules:**
+
+1. ✅ **Create a feature branch** from `develop` (never commit to main directly)
+2. ✅ **Write tests FIRST** (Test-Driven Development) before implementing features
+3. ✅ **Create a Pull Request** on GitHub (never merge directly)
+4. ✅ **Get code review approval** before merging
+5. ✅ **Merge via GitHub UI** (use squash/rebase to keep history clean)
+6. ✅ **Sync develop with main** after releasing to main
+7. ✅ **Follow Conventional Commits** for clear commit messages
+
+**See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed workflow, branching conventions, and commit style.**
 
 ## License
 
