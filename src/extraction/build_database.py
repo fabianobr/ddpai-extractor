@@ -804,12 +804,33 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
     print("Step 2: Detecting trip groups (30-min gap threshold)...")
     groups = detect_trip_groups(tar_files)
     print(f"  Detected {len(groups)} trip groups")
+
+    # Show chronological range for each group
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')}")
     print()
 
     # Step 3: Process each group
