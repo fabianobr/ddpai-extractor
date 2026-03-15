@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 
 TAR_DIR="${1:-working_data/tar}"
 REAR_DIR="${2:-/Users/fabianosilva/dashcam/DCIM/200video/rear}"
@@ -21,6 +21,6 @@ echo "   Front videos: $FRONT_DIR"
 echo "   Output:       $OUTPUT_DIR"
 echo ""
 
-python3 src/build_database_parallel.py "$TAR_DIR" "$REAR_DIR" "$FRONT_DIR" "$OUTPUT_DIR"
+python3 -m src.extraction.build_database_parallel "$TAR_DIR" "$REAR_DIR" "$FRONT_DIR" "$OUTPUT_DIR"
 echo ""
 echo "✅ Done. Start app with: ./run.sh"

@@ -40,7 +40,7 @@ cd ddpai-extractor
 ## Configuration
 
 ### Video Paths
-Edit `src/build_database.py` lines 18–20 to point to your dashcam directories:
+Edit `src/extraction/build_database.py` lines 18–20 to point to your dashcam directories:
 ```python
 REAR_VIDEO_DIR = '/path/to/your/rear/videos/'
 FRONT_VIDEO_DIR = '/path/to/your/front/videos/'
@@ -48,13 +48,13 @@ TAR_ARCHIVE_DIR = '/path/to/your/tar/archives/'
 ```
 
 ### Trip Detection
-Modify `GAP_THRESHOLD` in `src/build_database.py` (line 24, default: 1800 seconds = 30 minutes):
+Modify `GAP_THRESHOLD` in `src/extraction/build_database.py` (line 24, default: 1800 seconds = 30 minutes):
 ```python
 GAP_THRESHOLD = 30 * 60  # seconds between files to split trips
 ```
 
 ### Video Encoding
-Tune quality/speed tradeoffs in `src/build_database.py` lines 51–53:
+Tune quality/speed tradeoffs in `src/extraction/build_database.py` lines 51–53:
 ```python
 OUTPUT_HEIGHT = 720        # Target resolution (default 720p)
 VIDEO_CRF = 26            # Quality: 18-22 (high), 26 (default), 28+ (compressed)
@@ -117,7 +117,7 @@ Browser: Leaflet map, Chart.js graphs, video players
 ### Parallel Build (Optional)
 For faster processing on multi-core systems:
 ```bash
-./build_parallel.sh
+./tools/build_parallel.sh
 # Same output as ./build.sh but ~2.5–3.5× faster
 ```
 
@@ -125,6 +125,12 @@ For faster processing on multi-core systems:
 ```bash
 ./run.sh
 # Starts HTTP server on localhost:8000 (requires for JSON fetch)
+```
+
+### Additional Tools
+```bash
+./tools/debug_videos.sh       # Debug video file status and encoding
+./tools/install_fftools.sh    # Install or verify FFmpeg dependencies
 ```
 
 ### Verify Video Encoding
@@ -155,7 +161,7 @@ Web UI requires HTTP serving (not `file://` URLs). Use `./run.sh` to start the s
 The project gracefully ignores corrupted TAR files and bad NMEA checksums. Check build output for warnings.
 
 ### Video Playback Issues
-- Verify video paths in `src/build_database.py` lines 18–20 exist
+- Verify video paths in `src/extraction/build_database.py` lines 18–20 exist
 - Check browser DevTools Console for path errors
 - Ensure dashcam videos are in H.264/MP4 format
 
