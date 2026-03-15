@@ -1,6 +1,60 @@
 # Contributing
 
-Thank you for your interest in contributing! This project uses Git Flow branching and Conventional Commits.
+Thank you for your interest in contributing! **Please read this entire guide before submitting any changes.**
+
+---
+
+## 🔴 MUST DO: Mandatory Requirements
+
+**ALL contributions MUST follow these rules — NO EXCEPTIONS:**
+
+### 1. Feature Branch (REQUIRED)
+- ✅ Create a feature branch from `develop`: `git checkout -b feature/your-feature-name`
+- ✅ Use branch naming: `feature/*`, `fix/*`, `docs/*`, `refactor/*`
+- ❌ DO NOT commit directly to `main` or `develop`
+
+### 2. Test-Driven Development (REQUIRED)
+- ✅ Write tests FIRST before implementing features
+- ✅ Place tests in `tests/` directory (e.g., `tests/test_watch.sh`)
+- ✅ Run tests locally before pushing: `pytest` or `bash tests/*.sh`
+- ✅ All tests MUST pass before PR submission
+- ❌ DO NOT submit code without tests
+
+### 3. Pull Request (REQUIRED)
+- ✅ Push branch: `git push -u origin feature/your-feature-name`
+- ✅ Create PR on GitHub (never merge directly)
+- ✅ Link PR to GitHub Projects board
+- ✅ Wait for code review approval
+- ❌ DO NOT self-approve or force-merge
+- ❌ DO NOT use `git push --force`
+
+### 4. Code Review (REQUIRED)
+- ✅ Request review from project maintainers
+- ✅ Fix review comments in new commits (don't amend published commits)
+- ✅ Respond to all feedback before merging
+- ❌ DO NOT ignore review feedback
+
+### 5. Merge Via GitHub (REQUIRED)
+- ✅ Merge through GitHub UI only
+- ✅ Delete feature branch after merge
+- ✅ If merging to `main`, sync `develop` afterward (see Sync below)
+- ❌ DO NOT use force-push or rebase on shared branches
+
+### 6. Branch Sync (REQUIRED for releases)
+After merging a release PR to `main`:
+```bash
+git checkout develop
+git pull origin develop
+git merge main
+git push origin develop
+git checkout main
+```
+
+---
+
+## Workflow Overview
+
+This project uses **Git Flow** branching and **Conventional Commits**.
 
 ## Git Flow Branching
 
