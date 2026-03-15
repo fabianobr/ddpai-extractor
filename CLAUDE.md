@@ -20,6 +20,21 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 # Open browser to http://localhost:8000/web/
 ```
 
+## ⚠️ MUST DO: Development Workflow
+
+**All changes to this project MUST follow this workflow:**
+
+1. **Branch:** Create a feature branch (do NOT commit to main directly)
+2. **Test:** Write tests first (TDD), verify all tests pass
+3. **Code:** Implement changes, run tests to confirm passing
+4. **PR:** Push branch and create a Pull Request on GitHub
+5. **Review:** Get approval before merging to main
+6. **Merge:** Merge via GitHub (never force-push)
+
+**Why:** This ensures code quality, test coverage, and a clean git history.
+
+**For Claude Code:** Use `/verify-before-completion` skill before marking work done.
+
 ## Architecture & Workflow
 
 ```
