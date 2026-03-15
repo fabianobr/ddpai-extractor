@@ -20,6 +20,22 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 # Open browser to http://localhost:8000/web/
 ```
 
+## ⚠️ MUST DO: Development Workflow
+
+**All changes to this project MUST follow this workflow:**
+
+1. **Branch:** Create a feature branch (do NOT commit to main directly)
+2. **Test:** Write tests first (TDD), verify all tests pass
+3. **Code:** Implement changes, run tests to confirm passing
+4. **PR:** Push branch and create a Pull Request on GitHub
+5. **Review:** Get approval before merging to main
+6. **Merge:** Merge via GitHub (never force-push)
+7. **Sync:** After merge to main, sync develop branch: `git checkout develop && git merge main && git push origin develop && git checkout main`
+
+**Why:** This ensures code quality, test coverage, a clean git history, and keeps develop branch in sync with main after each release.
+
+**For Claude Code:** Use `/verify-before-completion` skill before marking work done.
+
 ## Architecture & Workflow
 
 ```
@@ -42,7 +58,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 
 ### Core Modules
 
-**src/build_database.py** (Main)
+**src/extraction/build_database.py** (Main)
 - `parse_nmea_sentence()` / `parse_rmc()` / `parse_gga()`: NMEA sentence parsing
 - `extract_gps_from_tar()`: Reads .gpx NMEA data from TAR members
 - `detect_trip_groups()`: Groups consecutive .git files by 30-min gaps
@@ -50,20 +66,26 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - `merge_videos()`: Concatenates rear/front videos with H.264 720p re-encoding (~70% size reduction)
 - Outputs: `data/trips.json` (GPS points, trip stats, video references)
 
+**src/extraction/build_database_parallel.py** (Parallel variant)
+- Same functions as build_database.py, parallel video encoding (2.5-3.5× speedup)
+
 **web/index.html** (Frontend)
 - Fetches `data/trips.json` dynamically at page load
 - Renders interactive map (Leaflet.js), speed/altitude charts (Chart.js)
 - Displays trip selector, linked rear+front video players
 - All UI logic is client-side JavaScript
 
-**Legacy utilities** (src/)
-- `merge_trips.py`: Standalone trip merging (rarely used)
-- `merge_videos.py`: Standalone FFmpeg wrapper (rarely used)
-- `ddpai_route_improved.py`: Original GPS extraction code (reference)
+**Utilities**
+- **src/processing/merge_trips.py**: Standalone trip merging (rarely used)
+- **src/video/merge_videos.py**: Standalone FFmpeg wrapper (rarely used)
+- **src/extraction/ddpai_route_improved.py**: Original GPS extraction code (reference)
+- **tools/build_parallel.sh**: Parallel build entry point
+- **tools/debug_videos.sh**: Video debugging
+- **tools/install_fftools.sh**: FFmpeg helper
 
 ### Data Sources
 
-**Input Paths** (configured in src/build_database.py)
+**Input Paths** (configured in src/extraction/build_database.py)
 - `.git TAR files`: `working_data/tar/` (100 files, ~30 MB each)
 - Rear videos: `/Users/fabianosilva/dashcam/DCIM/200video/rear/`
 - Front videos: `/Users/fabianosilva/dashcam/DCIM/200video/front/`
@@ -110,7 +132,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 **Rebuild the trip database** (entry point)
 ```bash
 ./build.sh
-# Runs: python3 src/build_database.py
+# Runs: python3 -m src.extraction.build_database
 # Output: data/trips.json
 ```
 
@@ -121,16 +143,16 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 # Access: http://localhost:8000/web/
 ```
 
-**Change trip grouping threshold** (src/build_database.py)
+**Change trip grouping threshold** (src/extraction/build_database.py)
 - Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
 - Re-run `./build.sh`
 
-**Modify video encoding parameters** (src/build_database.py & src/build_database_parallel.py)
+**Modify video encoding parameters** (src/extraction/build_database.py & src/extraction/build_database_parallel.py)
 - Modify encoding constants at module level (lines 51-53):
   - `OUTPUT_HEIGHT` (default 720) — target resolution
   - `VIDEO_CRF` (default 26) — quality, range 18-28 (lower = higher quality, larger file)
   - `VIDEO_PRESET` (default 'fast') — speed, options: ultrafast, fast, medium, slow
-- **Important**: Both `src/build_database.py` AND `src/build_database_parallel.py` must be kept in sync (parallel imports from sequential)
+- **Important**: Both `src/extraction/build_database.py` AND `src/extraction/build_database_parallel.py` must be kept in sync (parallel imports from sequential)
 - Verify output resolution: `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 merged_videos/*_rear.mp4`
 
 **Modify video merging function** (advanced)
@@ -173,7 +195,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - Update Leaflet map center/zoom, Chart.js colors, etc.
 
 **Add new trip metadata to JSON**
-- Edit `groups_data.append()` section in src/build_database.py
+- Edit `groups_data.append()` section in src/extraction/build_database.py
 - Add fields to the dictionary, they'll auto-appear in web/index.html if accessed
 
 ### Testing & Validation
@@ -205,7 +227,7 @@ No automated test suite. Manual validation:
 
 ## Known Limitations & Quirks
 
-- **Hardcoded paths**: Video directories are absolute paths in src/build_database.py (lines 18-20)
+- **Hardcoded paths**: Video directories are absolute paths in src/extraction/build_database.py (lines 18-20)
 - **NMEA parsing**: Gracefully ignores bad checksums and malformed sentences
 - **Timezone**: Assumes UTC, converts via TAR filename timestamp (no local timezone detection)
 - **Video validation**: Matches rear/front count per trip but doesn't verify frame counts
@@ -231,22 +253,45 @@ No automated test suite. Manual validation:
 6. Mar 07 15:22 → 18:48 (336.93 km, 206.1 min) — Full day drive
 7. Mar 08 07:13 → 07:25 (0.46 km, 12.1 min)
 
-## Project Layout (v3)
+## Project Layout (v4)
 
 ```
 ddpai_extractor/
-├── build.sh              # Build entry point (calls src/build_database.py)
+├── build.sh              # Build entry point (calls src.extraction.build_database)
 ├── run.sh               # Run entry point (starts HTTP server on port 8000)
 ├── CLAUDE.md            # This file
+├── README.md            # User documentation
+├── LICENSE              # MIT license
 │
-├── src/                 # Python modules
-│   ├── build_database.py        # Main: GPS extraction + trip detection + JSON output
-│   ├── merge_trips.py           # Utility: standalone trip merging
-│   ├── merge_videos.py          # Utility: FFmpeg wrapper
-│   └── ddpai_route_improved.py  # Reference: original GPS extraction
+├── src/                 # Python package
+│   ├── __init__.py
+│   ├── extraction/      # GPS extraction & trip detection
+│   │   ├── __init__.py
+│   │   ├── build_database.py           # Main: GPS extraction + trip detection
+│   │   ├── build_database_parallel.py  # Parallel variant
+│   │   └── ddpai_route_improved.py     # Reference: original code
+│   ├── processing/      # Trip utilities
+│   │   ├── __init__.py
+│   │   └── merge_trips.py              # Standalone trip merging
+│   └── video/           # Video handling
+│       ├── __init__.py
+│       └── merge_videos.py             # FFmpeg wrapper
+│
+├── tools/               # Build & debug scripts
+│   ├── build_parallel.sh       # Parallel build (2.5-3.5× speedup)
+│   ├── debug_videos.sh         # Video debugging utility
+│   └── install_fftools.sh      # FFmpeg installation helper
+│
+├── docs/                # Documentation
+│   ├── CONTRIBUTING.md         # Contribution guidelines
+│   ├── CHANGELOG.md            # Release history
+│   ├── VIDEO_DEBUG_GUIDE.md    # Debugging guide
+│   └── superpowers/            # Extended docs
 │
 ├── web/                 # Web frontend
-│   └── index.html       # Dashboard: fetches data/trips.json, renders UI
+│   ├── index.html              # Dashboard: fetches data/trips.json, renders UI
+│   ├── favicon.ico             # Icon
+│   └── favicon.png             # Icon
 │
 ├── data/                # Generated data (do not commit)
 │   └── trips.json       # Auto-generated by ./build.sh
@@ -265,7 +310,7 @@ ddpai_extractor/
 This project was refactored from monolithic `build_dashboard.py` (single 30KB script generating 1.4 MB HTML with embedded JSON) to a **modular architecture**:
 
 **Changes:**
-- **Decoupled build**: `src/build_database.py` → generates JSON only, no HTML
+- **Decoupled build**: `src/extraction/build_database.py` → generates JSON only, no HTML
 - **Decoupled frontend**: `web/index.html` → static 14 KB, loads data via fetch()
 - **Clean entry points**: `./build.sh` and `./run.sh` for common tasks
 - **Organized code**: Python modules in `src/`, web assets in `web/`

@@ -12,6 +12,9 @@ src/__pycache__/
 backup/
 .claude/
 
+# Git worktrees (isolated development branches)
+.worktrees/
+
 # Large binary files
 *.mp4
 *.tar
