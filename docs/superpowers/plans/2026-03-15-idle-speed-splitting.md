@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Detect and separate idle/low-speed periods (≤ configurable threshold, default 0 km/h) lasting ≥5 minutes from main trips, store results in JSON, and visualize on the dashboard UI.
+**Goal:** Detect and separate idle/low-speed periods (≤ 0.5 km/h for GPS noise tolerance, minimum 5 minutes) from main trips, store results in JSON, and visualize on the dashboard UI.
 
-**Architecture:** Add idle detection to the backend GPS extraction pipeline that identifies continuous periods below a speed threshold, splits them as separate logical segments in the JSON output, and marks them visually on the interactive map (different colors for active vs idle portions).
+**Architecture:** Add idle detection to the backend GPS extraction pipeline that identifies continuous periods at or below 0.5 km/h lasting ≥5 minutes, splits them as separate logical segments in the JSON output, and marks them visually on the interactive map with dashed gray lines. Process only on new builds (no full database rebuild).
 
 **Tech Stack:** Python 3 (tarfile, json, subprocess), FFmpeg, JavaScript (Leaflet.js for map visualization), HTML/CSS for styling.
 
@@ -123,15 +123,15 @@ def test_idle_segment_with_custom_threshold():
     """Test idle detection with custom speed threshold."""
     points = [
         {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 5.0, 'timestamp': 60},    # Below 8 km/h threshold
-        {'speed_kmh': 3.0, 'timestamp': 120},
-        {'speed_kmh': 2.0, 'timestamp': 180},
-        {'speed_kmh': 4.0, 'timestamp': 240},
-        {'speed_kmh': 6.0, 'timestamp': 300},
+        {'speed_kmh': 0.3, 'timestamp': 60},    # Below 5 km/h custom threshold
+        {'speed_kmh': 0.2, 'timestamp': 120},
+        {'speed_kmh': 0.1, 'timestamp': 180},
+        {'speed_kmh': 0.4, 'timestamp': 240},
+        {'speed_kmh': 0.5, 'timestamp': 300},
         {'speed_kmh': 15.0, 'timestamp': 360},
     ]
 
-    idle_segments = detect_idle_segments(points, speed_threshold=8.0)
+    idle_segments = detect_idle_segments(points, speed_threshold=5.0)
 
     assert len(idle_segments) == 1
     assert idle_segments[0]['start_index'] == 1
@@ -167,7 +167,7 @@ Open `src/build_database.py` and add these constants after the video encoding co
 
 ```python
 # Idle detection configuration
-IDLE_SPEED_THRESHOLD = 0.0          # km/h — speed at or below this is considered idle
+IDLE_SPEED_THRESHOLD = 0.5          # km/h — speed at or below this is considered idle (0.5 tolerance for GPS noise)
 IDLE_DURATION_THRESHOLD = 5 * 60    # 300 seconds (5 minutes minimum)
 ```
 
@@ -351,7 +351,11 @@ def validate_group(group, files_data):
     return trip_data
 ```
 
-- [ ] **Step 4: Run full test suite**
+- [ ] **Step 4: Verify backwards compatibility (no full rebuild needed)**
+
+The updated `build_database.py` will add `idle_segments` to new builds only. Existing `data/trips.json` can remain unchanged — the next `./build.sh` run will include idle detection without rebuilding the entire database.
+
+- [ ] **Step 5: Run full test suite**
 
 ```bash
 cd /Users/fabianosilva/Documentos/code/ddpai_extractor
@@ -360,7 +364,7 @@ python -m pytest tests/ -v
 
 Expected: All tests PASS
 
-- [ ] **Step 5: Verify build still works**
+- [ ] **Step 6: Verify build still works**
 
 ```bash
 cd /Users/fabianosilva/Documentos/code/ddpai_extractor
@@ -369,7 +373,7 @@ python -m src.extraction.build_database
 
 Check that `data/trips.json` is created and contains `idle_segments` field for each trip.
 
-- [ ] **Step 6: Commit integration**
+- [ ] **Step 7: Commit integration**
 
 ```bash
 git add src/build_database.py tests/test_idle_detection.py
@@ -546,32 +550,17 @@ Find the section that displays trip statistics (around line 450-500) and add idl
 function updateTripInfo(trip) {
     // ... existing trip info code ...
 
-    // Add idle segment statistics
+    // Add idle segment statistics (each segment shown individually as split entries)
     let idleHtml = '';
     if (trip.idle_segments && trip.idle_segments.length > 0) {
-        idleHtml += '<div class="idle-info">';
-        idleHtml += '<strong>⏸ Idle Periods:</strong> ' + trip.idle_segments.length + '<br>';
-
-        let totalIdleTime = 0;
-        let totalIdleDistance = 0;
-        for (let seg of trip.idle_segments) {
-            totalIdleTime += seg.duration_s;
-            totalIdleDistance += seg.distance_km;
-        }
-
-        idleHtml += 'Duration: ' + Math.round(totalIdleTime / 60) + ' min<br>';
-        idleHtml += 'Distance: ' + totalIdleDistance.toFixed(2) + ' km<br>';
-        idleHtml += '</div>';
-
-        // Show individual idle periods
-        idleHtml += '<strong>Details:</strong><br>';
+        // Show each idle segment as a separate entry (not grouped)
         for (let i = 0; i < trip.idle_segments.length; i++) {
             let seg = trip.idle_segments[i];
             idleHtml += '<div class="idle-info">';
-            idleHtml += 'Idle #' + (i + 1) + ': ' +
+            idleHtml += '<strong>⏸ Idle Segment ' + (i + 1) + ':</strong> ' +
                         (seg.duration_s / 60).toFixed(1) + ' min, ' +
                         seg.distance_km.toFixed(2) + ' km<br>';
-            idleHtml += 'Points: ' + (seg.end_index - seg.start_index + 1) + ' GPS records<br>';
+            idleHtml += 'GPS Points: ' + (seg.end_index - seg.start_index + 1) + ' records<br>';
             idleHtml += '</div>';
         }
     }
@@ -706,7 +695,7 @@ cd /Users/fabianosilva/Documentos/code/ddpai_extractor
 echo "Build exit code: $?"
 ```
 
-Expected: Exit code 0, `data/trips.json` generated
+Expected: Exit code 0, `data/trips.json` generated with `idle_segments` for each trip
 
 - [ ] **Step 6: Final commit**
 
