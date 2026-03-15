@@ -94,3 +94,38 @@ def test_idle_segment_with_custom_threshold():
     assert len(idle_segments) == 1
     assert idle_segments[0]['start_index'] == 1
     assert idle_segments[0]['end_index'] == 5
+
+
+# Run tests when executed directly
+if __name__ == '__main__':
+    test_count = 0
+    passed_count = 0
+    failed_count = 0
+
+    tests = [
+        test_detect_single_idle_segment,
+        test_no_idle_segments_when_speed_above_threshold,
+        test_idle_period_too_short_ignored,
+        test_multiple_idle_segments,
+        test_idle_segment_with_custom_threshold,
+    ]
+
+    for test_func in tests:
+        test_count += 1
+        try:
+            test_func()
+            passed_count += 1
+            print(f"✅ {test_func.__name__}")
+        except AssertionError as e:
+            failed_count += 1
+            print(f"❌ {test_func.__name__}: {e}")
+        except Exception as e:
+            failed_count += 1
+            print(f"❌ {test_func.__name__}: ERROR - {e}")
+
+    print(f"\n{'='*60}")
+    print(f"Results: {passed_count} passed, {failed_count} failed out of {test_count} tests")
+    print(f"{'='*60}")
+
+    if failed_count > 0:
+        sys.exit(1)
