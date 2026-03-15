@@ -2,7 +2,9 @@
 working_data/
 merged_videos/
 data/trips.json
+data/trips.json.bak
 data/merge_report.txt
+data/.last_tar_count
 videos/
 
 # macOS / tooling
