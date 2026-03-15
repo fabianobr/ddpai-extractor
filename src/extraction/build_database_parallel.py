@@ -91,12 +91,35 @@ def process_group(group_idx, group, total_groups, inner_executor):
     for line in video_warnings:
         locked_print(f"  [{group_id}] {line}")
 
-    # Skip if no videos at all or missing either camera
-    if video_has_errors and (not rear_videos or not front_videos):
-        locked_print(f"  [{group_id}] ⚠️  SKIP: missing rear or front videos")
+    # Smart video merge: implement min() count strategy
+    rear_count = len(rear_videos)
+    front_count = len(front_videos)
+
+    if not (rear_count > 0 and front_count > 0):
+        # Skip if missing either camera
+        if rear_count == 0 and front_count == 0:
+            locked_print(f"  [{group_id}] ⚠️  SKIP: no videos found")
+        elif rear_count == 0:
+            locked_print(f"  [{group_id}] ⚠️  SKIP: no rear videos ({front_count} front available)")
+        else:
+            locked_print(f"  [{group_id}] ⚠️  SKIP: no front videos ({rear_count} rear available)")
         return None, group_merge_info
 
     locked_print(f"  [{group_id}] ✅ GPS validated - proceeding with merge")
+
+    # Both cameras have videos: use min() to ensure sync
+    merge_count = min(rear_count, front_count)
+    if rear_count != front_count:
+        ignored_count = abs(rear_count - front_count)
+        locked_print(f"  [{group_id}] ⚠️  VIDEO COUNT MISMATCH: {rear_count} rear vs {front_count} front")
+        locked_print(f"  [{group_id}]    Merge strategy: Using min({rear_count}, {front_count}) = {merge_count} pairs")
+        locked_print(f"  [{group_id}]    Will ignore: {ignored_count} extra video(s)")
+
+        # Rediscover with limit to get only the pairs we'll merge
+        rear_videos = discover_videos(group, camera='rear', limit_count=merge_count)
+        front_videos = discover_videos(group, camera='front', limit_count=merge_count)
+    else:
+        locked_print(f"  [{group_id}] ✅ Both cameras matched: {merge_count} pairs ready for merge")
 
     # ========== Compute stats ==========
     stats = compute_trip_stats(all_points)
@@ -127,6 +150,12 @@ def process_group(group_idx, group, total_groups, inner_executor):
     if not (rear_ok and front_ok):
         locked_print(f"  [{group_id}] ⚠️  SKIP: video merge failed")
         return None, group_merge_info
+
+    # Log merge success with mismatch info if applicable
+    if rear_count != front_count:
+        locked_print(f"  [{group_id}] ✅ Merged: {merge_count} pairs ({ignored_count} extra video(s) ignored)")
+    else:
+        locked_print(f"  [{group_id}] ✅ Merged: {merge_count} pairs")
 
     # ========== Build result dict ==========
     end_date = start_utc + timedelta(minutes=stats['duration_min'])

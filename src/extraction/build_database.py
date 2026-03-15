@@ -346,9 +346,11 @@ def compute_trip_stats(points):
 # Video Discovery & Merging
 # ============================================================================
 
-def discover_videos(tar_paths, camera='rear'):
+def discover_videos(tar_paths, camera='rear', limit_count=None):
     """
     Discover ALL video files that fall within the time range of the TAR group.
+
+    If limit_count is provided, return only the first limit_count videos.
 
     CORRECTED LOGIC:
     1. Get START time from first TAR file
@@ -396,7 +398,12 @@ def discover_videos(tar_paths, camera='rear'):
             # Skip files with unparseable timestamps
             pass
 
-    return sorted(videos)  # Return in chronological order
+    videos = sorted(videos)  # Return in chronological order
+
+    if limit_count is not None and len(videos) > limit_count:
+        return videos[:limit_count]
+
+    return videos
 
 def get_video_duration(video_path):
     """Get video duration in seconds using ffprobe (with timeout)."""
@@ -726,27 +733,72 @@ def main():
         print(f"    • Max speed: {stats['max_speed']} km/h")
         print(f"    • Avg speed: {stats['avg_speed']} km/h")
 
-        # Merge videos
-        print("  🎬 Merging videos...")
-        rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
-        front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
+        # Smart video merge: implement min() count strategy
+        print("  🎬 Smart merge strategy...")
+        rear_count = len(rear_videos)
+        front_count = len(front_videos)
 
-        rear_ok, rear_debug = merge_videos(rear_videos, rear_output, 'Rear')
-        if rear_debug:
-            for line in rear_debug:
-                print(line, flush=True)
-            all_merge_info.extend(rear_debug)
+        if rear_count > 0 and front_count > 0:
+            # Both cameras have videos: use min() to ensure sync
+            merge_count = min(rear_count, front_count)
 
-        front_ok, front_debug = merge_videos(front_videos, front_output, 'Front')
-        if front_debug:
-            for line in front_debug:
-                print(line, flush=True)
-            all_merge_info.extend(front_debug)
+            if rear_count != front_count:
+                # Count mismatch - log explicitly
+                ignored_count = abs(rear_count - front_count)
+                print(f"    ⚠️  VIDEO COUNT MISMATCH: {rear_count} rear vs {front_count} front")
+                print(f"       Merge strategy: Using min({rear_count}, {front_count}) = {merge_count} pairs")
+                print(f"       Will ignore: {ignored_count} extra video(s)")
 
-        if rear_ok and front_ok:
-            print(f"    ✅ Merged: {os.path.basename(rear_output)}, {os.path.basename(front_output)}")
+                # Rediscover with limit to get only the pairs we'll merge
+                rear_videos = discover_videos(group, camera='rear', limit_count=merge_count)
+                front_videos = discover_videos(group, camera='front', limit_count=merge_count)
+            else:
+                print(f"    ✅ Both cameras matched: {merge_count} pairs ready for merge")
+
+            # Merge the limited video lists
+            print("  🎬 Merging videos...")
+            rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
+            front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
+
+            rear_ok, rear_debug = merge_videos(rear_videos, rear_output, 'Rear')
+            if rear_debug:
+                for line in rear_debug:
+                    print(line, flush=True)
+                all_merge_info.extend(rear_debug)
+
+            front_ok, front_debug = merge_videos(front_videos, front_output, 'Front')
+            if front_debug:
+                for line in front_debug:
+                    print(line, flush=True)
+                all_merge_info.extend(front_debug)
+
+            # Determine merge status
+            if rear_ok and front_ok:
+                if rear_count != front_count:
+                    print(f"    ✅ Merged: {os.path.basename(rear_output)}, {os.path.basename(front_output)}")
+                    print(f"       ({merge_count} pairs, {abs(rear_count - front_count)} extra video(s) ignored)")
+                else:
+                    print(f"    ✅ Merged: {os.path.basename(rear_output)}, {os.path.basename(front_output)}")
+            else:
+                print(f"  ⚠️  Skipping group {group_id}: Video merge failed")
+                print()
+                continue
+
+        elif rear_count > 0:
+            # Only rear videos - skip
+            print(f"  ⚠️  Skipping group {group_id}: No front videos ({rear_count} rear available)")
+            print()
+            continue
+
+        elif front_count > 0:
+            # Only front videos - skip
+            print(f"  ⚠️  Skipping group {group_id}: No rear videos ({front_count} front available)")
+            print()
+            continue
+
         else:
-            print(f"  ⚠️  Skipping group {group_id}: Video merge failed")
+            # No videos at all - skip
+            print(f"  ⚠️  Skipping group {group_id}: No videos found for either camera")
             print()
             continue
 
