@@ -18,6 +18,10 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 ./run.sh
 
 # Open browser to http://localhost:8000/web/
+
+# Auto-watch SD card for new recordings (optional)
+./watch.sh             # Sequential build (default)
+./watch.sh --parallel  # Parallel build (2.5-3.5x faster)
 ```
 
 ## ⚠️ MUST DO: Development Workflow
@@ -143,6 +147,14 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 # Access: http://localhost:8000/web/
 ```
 
+**Watch for new SD card recordings** (watch.sh)
+- Run: `./watch.sh [--parallel]`
+- Polls `/Volumes/ddpai/DCIM/203gps/tar` every 30s for new TAR files
+- Auto-triggers build when new archives detected
+- Backs up `data/trips.json` before each rebuild
+- Sends macOS Notification Center alerts on build complete/failure
+- State file `data/.last_tar_count` tracks TAR file count (gitignored)
+
 **Change trip grouping threshold** (src/extraction/build_database.py)
 - Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
 - Re-run `./build.sh`
@@ -259,6 +271,7 @@ No automated test suite. Manual validation:
 ddpai_extractor/
 ├── build.sh              # Build entry point (calls src.extraction.build_database)
 ├── run.sh               # Run entry point (starts HTTP server on port 8000)
+├── watch.sh             # Watchdog script (polls SD card for new TAR files)
 ├── CLAUDE.md            # This file
 ├── README.md            # User documentation
 ├── LICENSE              # MIT license
