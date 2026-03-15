@@ -115,5 +115,49 @@ class TestStreamCopyMerge(unittest.TestCase):
             self.assertTrue(success, "merge_videos should return True on success")
 
 
+class TestStreamCopyIntegration(unittest.TestCase):
+    """Integration test: real FFmpeg command execution."""
+
+    def test_merge_two_real_videos_with_stream_copy(self):
+        """
+        Create two test videos, merge with stream copy, verify output.
+        This tests the real FFmpeg path (not mocked).
+        """
+        import subprocess
+
+        # Create test directory
+        test_dir = tempfile.TemporaryDirectory()
+
+        try:
+            # Create two 2-second test videos
+            video1 = os.path.join(test_dir.name, 'test1.mp4')
+            video2 = os.path.join(test_dir.name, 'test2.mp4')
+            output = os.path.join(test_dir.name, 'output.mp4')
+
+            for video in [video1, video2]:
+                subprocess.run([
+                    'ffmpeg',
+                    '-f', 'lavfi', '-i', 'color=c=blue:s=1280x720:d=2',
+                    '-f', 'lavfi', '-i', 'sine=f=440:d=2',
+                    '-pix_fmt', 'yuv420p',
+                    video, '-y'
+                ], capture_output=True, timeout=10)
+
+            # Merge with stream copy
+            success, debug_info = merge_videos([video1, video2], output, use_stream_copy=True)
+
+            # Verify success
+            self.assertTrue(success, f"Merge failed: {debug_info}")
+            self.assertTrue(os.path.exists(output), "Output file not created")
+            self.assertGreater(os.path.getsize(output), 10000, "Output too small")
+
+            print(f"\n✅ Integration test passed")
+            print(f"   Output: {output}")
+            print(f"   Size: {os.path.getsize(output)} bytes")
+
+        finally:
+            test_dir.cleanup()
+
+
 if __name__ == '__main__':
     unittest.main()
