@@ -550,29 +550,60 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
 # Validation
 # ============================================================================
 
-def validate_group(points, rear_videos, front_videos):
-    """Validate a group before including in dashboard."""
+def validate_gps(points):
+    """Validate GPS data. Returns list of fatal errors."""
     errors = []
-
-    # (a) Speed data
+    if not points:
+        errors.append("No GPS data extracted")
+        return errors
     if not any(p['speed_kmh'] > 0 for p in points):
         errors.append("No speed data (all speeds are 0)")
-
-    # (b) Altitude data
     if not any(p['altitude'] != 0 for p in points):
         errors.append("No altitude data (all altitudes are 0)")
-
-    # (c) Front videos exist
-    if not front_videos:
-        errors.append("No front video files found")
-
-    # (d) Rear videos exist and counts match
-    if not rear_videos:
-        errors.append("No rear video files found")
-    elif len(rear_videos) != len(front_videos):
-        errors.append(f"Video count mismatch: {len(rear_videos)} rear vs {len(front_videos)} front")
-
     return errors
+
+def validate_videos(rear_videos, front_videos):
+    """Validate video pairs. Returns (has_errors, detailed_warnings_list)."""
+    warnings = []
+    rear_count = len(rear_videos)
+    front_count = len(front_videos)
+
+    if not rear_videos and not front_videos:
+        warnings.append("❌ NO VIDEOS FOUND")
+        warnings.append("   • Rear: 0 videos")
+        warnings.append("   • Front: 0 videos")
+        warnings.append("   • Status: No video files in either directory")
+        return True, warnings
+
+    if not rear_videos:
+        warnings.append("❌ REAR VIDEOS MISSING")
+        warnings.append(f"   • Rear: 0 videos")
+        warnings.append(f"   • Front: {front_count} videos")
+        warnings.append("   • Status: Cannot merge (no rear camera data)")
+        return True, warnings
+
+    if not front_videos:
+        warnings.append("❌ FRONT VIDEOS MISSING")
+        warnings.append(f"   • Rear: {rear_count} videos")
+        warnings.append(f"   • Front: 0 videos")
+        warnings.append("   • Status: Cannot merge (no front camera data)")
+        return True, warnings
+
+    if rear_count != front_count:
+        diff = front_count - rear_count
+        sign = "+" if diff > 0 else ""
+        warnings.append("⚠️  VIDEO COUNT MISMATCH")
+        warnings.append(f"   • Rear: {rear_count} videos")
+        warnings.append(f"   • Front: {front_count} videos")
+        warnings.append(f"   • Difference: {sign}{diff} video(s)")
+        warnings.append(f"   • Strategy: Will merge min({rear_count}, {front_count}) = {min(rear_count, front_count)} pairs")
+        return True, warnings  # Not fatal - will still merge
+
+    warnings.append(f"✅ VIDEOS OK TO MERGE")
+    warnings.append(f"   • Rear: {rear_count} videos")
+    warnings.append(f"   • Front: {front_count} videos")
+    warnings.append("   • Status: Perfect match, ready for merge")
+    return False, warnings
 
 # ============================================================================
 # Main
@@ -652,16 +683,41 @@ def main():
         front_videos = discover_videos(group, camera='front')
         print(f"    → {len(rear_videos)} rear, {len(front_videos)} front")
 
-        # Validate group
-        errors = validate_group(all_points, rear_videos, front_videos)
-        if errors:
-            print(f"  ⚠️  Skipping group {group_id}:")
-            for err in errors:
+        # Validate GPS (mandatory)
+        gps_errors = validate_gps(all_points)
+        if gps_errors:
+            print(f"  ❌ Skipping group {group_id} (GPS validation failed):")
+            for err in gps_errors:
                 print(f"    • {err}")
             print()
+            report_lines.append(f"\nGROUP: {group_id} - SKIPPED (GPS validation failed)")
+            for err in gps_errors:
+                report_lines.append(f"  • {err}")
             continue
 
-        print("  ✅ Validation passed")
+        # Validate videos (optional - warn but continue)
+        video_has_errors, video_warnings = validate_videos(rear_videos, front_videos)
+        print(f"  🎥 Video Check:")
+        for line in video_warnings:
+            print(f"     {line}")
+
+        if video_has_errors and not rear_videos and not front_videos:
+            print(f"  ⚠️  Skipping group {group_id} (no videos available)")
+            print()
+            report_lines.append(f"\nGROUP: {group_id} - SKIPPED (no videos)")
+            for line in video_warnings:
+                report_lines.append(f"  {line}")
+            continue
+
+        if video_has_errors and (not rear_videos or not front_videos):
+            print(f"  ⚠️  Skipping group {group_id} (missing rear or front videos)")
+            print()
+            report_lines.append(f"\nGROUP: {group_id} - SKIPPED (missing rear/front)")
+            for line in video_warnings:
+                report_lines.append(f"  {line}")
+            continue
+
+        print(f"  ✅ GPS validation passed - proceeding with video merge")
 
         # Compute stats
         stats = compute_trip_stats(all_points)

@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
-    discover_videos, validate_group, compute_trip_stats,
+    discover_videos, validate_gps, validate_videos, compute_trip_stats,
     merge_videos, save_merge_report,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
@@ -79,13 +79,24 @@ def process_group(group_idx, group, total_groups, inner_executor):
     front_videos = discover_videos(group, camera='front')
     locked_print(f"  [{group_id}] 🎥 {len(rear_videos)} rear, {len(front_videos)} front")
 
-    # ========== Validate group ==========
-    errors = validate_group(all_points, rear_videos, front_videos)
-    if errors:
-        locked_print(f"  [{group_id}] ⚠️  SKIP: {'; '.join(errors)}")
+    # ========== Validate GPS (mandatory) ==========
+    gps_errors = validate_gps(all_points)
+    if gps_errors:
+        error_msg = '; '.join(gps_errors)
+        locked_print(f"  [{group_id}] ❌ SKIP (GPS): {error_msg}")
         return None, group_merge_info
 
-    locked_print(f"  [{group_id}] ✅ Validation passed")
+    # ========== Validate videos (optional) ==========
+    video_has_errors, video_warnings = validate_videos(rear_videos, front_videos)
+    for line in video_warnings:
+        locked_print(f"  [{group_id}] {line}")
+
+    # Skip if no videos at all or missing either camera
+    if video_has_errors and (not rear_videos or not front_videos):
+        locked_print(f"  [{group_id}] ⚠️  SKIP: missing rear or front videos")
+        return None, group_merge_info
+
+    locked_print(f"  [{group_id}] ✅ GPS validated - proceeding with merge")
 
     # ========== Compute stats ==========
     stats = compute_trip_stats(all_points)
