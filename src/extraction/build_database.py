@@ -210,8 +210,13 @@ def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
                 idle_end_idx = i - 1
                 idle_points = points[idle_start_idx:idle_end_idx + 1]
 
-                # Calculate duration from first and last timestamp
-                duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+                # Calculate duration from first and last timestamp (convert to seconds)
+                end_time = idle_points[-1].get('timestamp')
+                start_time = idle_points[0].get('timestamp')
+                if end_time and start_time:
+                    duration_s = (end_time - start_time).total_seconds()
+                else:
+                    duration_s = 0
 
                 if duration_s >= duration_threshold:
                     # Calculate distance traveled during idle period
@@ -232,7 +237,13 @@ def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
     if in_idle and idle_start_idx is not None:
         idle_end_idx = len(points) - 1
         idle_points = points[idle_start_idx:idle_end_idx + 1]
-        duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+        # Calculate duration from first and last timestamp (convert to seconds)
+        end_time = idle_points[-1].get('timestamp')
+        start_time = idle_points[0].get('timestamp')
+        if end_time and start_time:
+            duration_s = (end_time - start_time).total_seconds()
+        else:
+            duration_s = 0
 
         if duration_s >= duration_threshold:
             distance_km = sum([p.get('distance_km', 0) for p in idle_points])
