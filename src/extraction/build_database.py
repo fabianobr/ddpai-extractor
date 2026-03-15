@@ -52,6 +52,10 @@ OUTPUT_HEIGHT = 720      # Target height in pixels; width auto-scales to maintai
 VIDEO_CRF = 26           # H.264 quality (18=high quality/large, 28=lower quality/small)
 VIDEO_PRESET = 'fast'    # Encoding speed (ultrafast, fast, medium, slow)
 
+# Idle detection configuration
+IDLE_SPEED_THRESHOLD = 0.5          # km/h — speed at or below this is considered idle (0.5 tolerance for GPS noise)
+IDLE_DURATION_THRESHOLD = 4 * 60    # 240 seconds (4 minutes minimum)
+
 # ============================================================================
 # NMEA Parsing (reused from ddpai_route_improved.py)
 # ============================================================================
@@ -165,6 +169,83 @@ def parse_gga(data):
         }
     except (ValueError, IndexError):
         return None
+
+def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
+    """
+    Detect continuous idle periods (low speed) in GPS points.
+
+    Args:
+        points: List of dicts with 'speed_kmh' and 'timestamp' keys
+        speed_threshold: Speed threshold in km/h (default: IDLE_SPEED_THRESHOLD)
+        duration_threshold: Minimum idle duration in seconds (default: IDLE_DURATION_THRESHOLD)
+
+    Returns:
+        List of idle segment dicts: {start_index, end_index, duration_s, distance_km, points: [...]}
+    """
+    if speed_threshold is None:
+        speed_threshold = IDLE_SPEED_THRESHOLD
+    if duration_threshold is None:
+        duration_threshold = IDLE_DURATION_THRESHOLD
+
+    if not points:
+        return []
+
+    idle_segments = []
+    in_idle = False
+    idle_start_idx = None
+
+    for i, point in enumerate(points):
+        speed = point.get('speed_kmh', 0.0)
+
+        if speed <= speed_threshold:
+            # Point is in idle range
+            if not in_idle:
+                # Start of a new idle period
+                in_idle = True
+                idle_start_idx = i
+        else:
+            # Point is above idle threshold
+            if in_idle:
+                # End of idle period - check if duration meets threshold
+                idle_end_idx = i - 1
+                idle_points = points[idle_start_idx:idle_end_idx + 1]
+
+                # Calculate duration from first and last timestamp
+                duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+
+                if duration_s >= duration_threshold:
+                    # Calculate distance traveled during idle period
+                    distance_km = sum([p.get('distance_km', 0) for p in idle_points])
+
+                    idle_segments.append({
+                        'start_index': idle_start_idx,
+                        'end_index': idle_end_idx,
+                        'duration_s': duration_s,
+                        'distance_km': round(distance_km, 2),
+                        'points': idle_points
+                    })
+
+                in_idle = False
+                idle_start_idx = None
+
+    # Handle case where trip ends while idle
+    if in_idle and idle_start_idx is not None:
+        idle_end_idx = len(points) - 1
+        idle_points = points[idle_start_idx:idle_end_idx + 1]
+        duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+
+        if duration_s >= duration_threshold:
+            distance_km = sum([p.get('distance_km', 0) for p in idle_points])
+
+            idle_segments.append({
+                'start_index': idle_start_idx,
+                'end_index': idle_end_idx,
+                'duration_s': duration_s,
+                'distance_km': round(distance_km, 2),
+                'points': idle_points
+            })
+
+    return idle_segments
 
 def extract_gps_from_nmea(nmea_content):
     """Extract GPS points from NMEA text."""
