@@ -139,8 +139,10 @@ def process_group(group_idx, group, total_groups, inner_executor):
         locked_print(f"  [{group_id}] 🎬 Merging rear + front in parallel...")
 
         # Submit both rear and front merges to the inner executor
-        fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear')
-        fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front')
+        fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear',
+                                         None, False)
+        fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front',
+                                          None, False)
 
         # Wait for both to complete
         rear_ok, rear_debug = fut_rear.result()
