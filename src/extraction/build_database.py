@@ -54,7 +54,7 @@ VIDEO_PRESET = 'fast'    # Encoding speed (ultrafast, fast, medium, slow)
 
 # Idle detection configuration
 IDLE_SPEED_THRESHOLD = 0.5          # km/h — speed at or below this is considered idle (0.5 tolerance for GPS noise)
-IDLE_DURATION_THRESHOLD = 4 * 60    # 240 seconds (4 minutes minimum)
+IDLE_DURATION_THRESHOLD = 5 * 60    # 300 seconds (5 minutes minimum)
 
 # ============================================================================
 # NMEA Parsing (reused from ddpai_route_improved.py)

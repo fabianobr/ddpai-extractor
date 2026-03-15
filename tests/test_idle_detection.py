@@ -69,14 +69,15 @@ def test_multiple_idle_segments():
         {'speed_kmh': 0.0, 'timestamp': 720},
         {'speed_kmh': 0.0, 'timestamp': 780},
         {'speed_kmh': 0.0, 'timestamp': 840},
-        {'speed_kmh': 15.0, 'timestamp': 900},
+        {'speed_kmh': 0.0, 'timestamp': 900},
+        {'speed_kmh': 15.0, 'timestamp': 960},
     ]
     idle_segments = detect_idle_segments(points)
     assert len(idle_segments) == 2
     assert idle_segments[0]['start_index'] == 1
     assert idle_segments[0]['end_index'] == 7
     assert idle_segments[1]['start_index'] == 10
-    assert idle_segments[1]['end_index'] == 14
+    assert idle_segments[1]['end_index'] == 15
 
 
 def test_idle_segment_with_custom_threshold():
@@ -88,12 +89,13 @@ def test_idle_segment_with_custom_threshold():
         {'speed_kmh': 0.1, 'timestamp': 180},
         {'speed_kmh': 0.4, 'timestamp': 240},
         {'speed_kmh': 0.5, 'timestamp': 300},
-        {'speed_kmh': 15.0, 'timestamp': 360},
+        {'speed_kmh': 0.2, 'timestamp': 360},
+        {'speed_kmh': 15.0, 'timestamp': 420},
     ]
     idle_segments = detect_idle_segments(points, speed_threshold=5.0)
     assert len(idle_segments) == 1
     assert idle_segments[0]['start_index'] == 1
-    assert idle_segments[0]['end_index'] == 5
+    assert idle_segments[0]['end_index'] == 6
 
 
 # Run tests when executed directly

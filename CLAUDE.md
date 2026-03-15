@@ -202,7 +202,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 
 **Change idle detection settings** (src/extraction/build_database.py)
 - Modify `IDLE_SPEED_THRESHOLD` (line 56): default 0.5 km/h — speeds at or below this are "idle"
-- Modify `IDLE_DURATION_THRESHOLD` (line 57): default 240 seconds (4 min) — minimum idle period duration
+- Modify `IDLE_DURATION_THRESHOLD` (line 57): default 300 seconds (5 min) — minimum idle period duration
 - Re-run `./build.sh`
 - Idle segments appear in `data/trips.json` as `idle_segments` array per trip
 - Each segment includes: start_index, end_index, duration_s, distance_km
