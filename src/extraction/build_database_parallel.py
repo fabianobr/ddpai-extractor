@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
     detect_idle_segments, discover_videos, validate_gps, validate_videos,
-    compute_trip_stats, merge_videos, save_merge_report,
+    compute_trip_stats, merge_videos, save_merge_report, is_parking_file,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
     OUTPUT_HEIGHT, VIDEO_CRF, VIDEO_PRESET
@@ -265,11 +265,17 @@ def main():
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold + speed analysis)...")
-    groups, gaps = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} groups by time gap")
+    print("Step 2: Detecting trip groups (30-min gap threshold + hybrid parking detection)...")
+    groups, gaps, parking_files = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} driving trip groups by time gap")
+    print(f"  Filtered {len(parking_files)} parking TAR files (distance < 0.6km OR avg_speed < 3.0 km/h)")
+    print()
 
-    # Show chronological range for each group
+    # Show detailed info for each driving group
+    print(f"  📊 DRIVING TRIP GROUPS (Time gaps indicate parking periods):")
+    print(f"  {'Grp':<4} {'Start Time':<20} {'End Time':<20} {'Files':<6} {'Distance':<12} {'Duration':<12} {'Max Speed':<12} {'Mode':<12}")
+    print(f"  {'-'*124}")
+
     for group_idx, group in enumerate(groups, 1):
         first_start, first_dur = parse_tar_filename(group[0])
         last_tar = group[-1]
@@ -277,19 +283,43 @@ def main():
 
         if first_start and last_start and last_dur:
             last_end = last_start + timedelta(seconds=last_dur)
-            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
 
-    # Note: Idle detection is now purely for visualization/marking (not splitting trips)
-    # Idle segments will be marked within each trip and available in idle_segments output
+            # Extract GPS to get stats
+            all_group_points = []
+            for tar_path in group:
+                points = extract_gps_from_tar(tar_path)
+                all_group_points.extend(points)
 
-    # Show gap information if any
+            if all_group_points:
+                stats = compute_trip_stats(all_group_points)
+                distance = stats['distance_km']
+                duration = stats['duration_min']
+                max_speed = stats['max_speed']
+            else:
+                distance = 0
+                duration = 0
+                max_speed = 0
+
+            start_str = first_start.strftime('%Y-%m-%d %H:%M:%S')
+            end_str = last_end.strftime('%H:%M:%S')
+            mode = "🚗 DRIVING"
+
+            print(f"  {group_idx:<4} {start_str:<20} {end_str:<20} {len(group):<6} {distance:>10.2f}km {duration:>10.1f}min {max_speed:>10.1f}km/h {mode:<12}")
+
+    # Show parking periods (time gaps)
     if gaps:
-        print(f"\n  ⏱️  Time gaps detected (>30min threshold):")
-        for gap in gaps:
-            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+        print(f"\n  ⏱️  PARKING PERIODS (Time gaps >30min between driving groups):")
+        print(f"  {'#':<4} {'Between Files':<50} {'Duration':<12} {'Mode':<12}")
+        print(f"  {'-'*90}")
+
+        for gap_idx, gap in enumerate(gaps, 1):
+            gap_minutes = gap['gap_minutes']
+            between_str = gap['between']
+            print(f"  {gap_idx:<4} {between_str:<50} {gap_minutes:>10.0f}min 🅿️ PARKING")
     else:
         print(f"\n  ℹ️  No time gaps >30min detected")
 
+    print(f"\n  📊 Result: {len(groups)} driving trip groups ({len(parking_files)} parking files excluded from processing)")
     print()
 
     # Step 3: Process groups in parallel
