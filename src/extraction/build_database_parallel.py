@@ -139,8 +139,10 @@ def process_group(group_idx, group, total_groups, inner_executor):
         locked_print(f"  [{group_id}] 🎬 Merging rear + front in parallel...")
 
         # Submit both rear and front merges to the inner executor
-        fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear')
-        fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front')
+        fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear',
+                                         None, False)
+        fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front',
+                                          None, False)
 
         # Wait for both to complete
         rear_ok, rear_debug = fut_rear.result()
@@ -237,12 +239,58 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} trip groups")
+    print("Step 2: Detecting trip groups (30-min gap threshold + speed analysis)...")
+    groups, gaps = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} groups by time gap")
+
+    # Show chronological range for each group
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
+
+    # Analyze each group for idle-based splits
+    print(f"\n  Analyzing GPS speed within groups...")
+    actual_driving_trips = 0
+    for group_idx, group in enumerate(groups, 1):
+        sub_trips = split_group_by_idle(group, idle_gap_minutes=30)
+        driving_trips = [t for t in sub_trips if t[1].get('distance_km', 0) > 0 and 'Drive' in t[1].get('label', '')]
+        actual_driving_trips += len(driving_trips)
+
+        print(f"  Group {group_idx}: {len(sub_trips)} segments")
+        for sub_idx, (_, trip_info) in enumerate(sub_trips, 1):
+            label = trip_info.get('label', 'Unknown')
+            dist = trip_info.get('distance_km', 0)
+            dur = trip_info.get('duration_min', 0)
+            print(f"    • {label}: {dist:.1f} km in {dur:.1f} min")
+
+    # Show gap information if any
+    if gaps:
+        print(f"\n  ⏱️  Time gaps detected (>30min threshold):")
+        for gap in gaps:
+            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+    else:
+        print(f"\n  ℹ️  No time gaps >30min detected")
+
+    print(f"\n  📊 Result: {actual_driving_trips} actual driving trips detected")
     print()
 
     # Step 3: Process groups in parallel
