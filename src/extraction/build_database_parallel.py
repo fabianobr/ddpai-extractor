@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
-    discover_videos, validate_gps, validate_videos, compute_trip_stats,
-    merge_videos, save_merge_report,
+    detect_idle_segments, discover_videos, validate_gps, validate_videos,
+    compute_trip_stats, merge_videos, save_merge_report,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
     OUTPUT_HEIGHT, VIDEO_CRF, VIDEO_PRESET
@@ -208,6 +208,19 @@ def process_group(group_idx, group, total_groups, inner_executor):
     video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
     video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
 
+    # Add idle segment detection
+    idle_segments = detect_idle_segments(all_points)
+
+    # Convert idle_segments to JSON-serializable format (remove 'points' key for output)
+    idle_segments_json = []
+    for seg in idle_segments:
+        idle_segments_json.append({
+            'start_index': seg['start_index'],
+            'end_index': seg['end_index'],
+            'duration_s': seg['duration_s'],
+            'distance_km': seg['distance_km'],
+        })
+
     return {
         'id': group_id,
         'label': label,
@@ -221,6 +234,7 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'video_front': video_front_path,
         'video_status': video_status,
         'video_notes': video_notes,
+        'idle_segments': idle_segments_json
     }, group_merge_info
 
 # ============================================================================
@@ -237,12 +251,45 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} trip groups")
+    print("Step 2: Detecting trip groups (30-min gap threshold + speed analysis)...")
+    groups, gaps = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} groups by time gap")
+
+    # Show chronological range for each group
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
+
+    # Note: Idle detection is now purely for visualization/marking (not splitting trips)
+    # Idle segments will be marked within each trip and available in idle_segments output
+
+    # Show gap information if any
+    if gaps:
+        print(f"\n  ⏱️  Time gaps detected (>30min threshold):")
+        for gap in gaps:
+            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+    else:
+        print(f"\n  ℹ️  No time gaps >30min detected")
+
     print()
 
     # Step 3: Process groups in parallel
