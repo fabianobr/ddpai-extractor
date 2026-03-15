@@ -11,7 +11,7 @@ import tarfile
 import subprocess
 import tempfile
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time, date
 from collections import defaultdict
 
 # Default Configuration
@@ -275,8 +275,17 @@ def extract_gps_from_nmea(nmea_content):
 
     return rmc_points, gga_points
 
-def merge_gps_points(rmc_points, gga_points):
-    """Merge RMC and GGA points into comprehensive records."""
+def merge_gps_points(rmc_points, gga_points, tar_date=None):
+    """Merge RMC and GGA points into comprehensive records.
+
+    Args:
+        rmc_points: Dict of RMC GPS records
+        gga_points: Dict of GGA GPS records
+        tar_date: datetime.date object for timestamp (e.g., from TAR filename)
+    """
+    if tar_date is None:
+        tar_date = datetime.now().date()
+
     points = []
 
     for time_key, rmc in rmc_points.items():
@@ -292,12 +301,26 @@ def merge_gps_points(rmc_points, gga_points):
         speed_kmh = rmc['speed_knots'] * 1.852  # knots to km/h
         heading = rmc['heading']
 
+        # Parse timestamp from time_key (format: HHMMSS) with actual date
+        try:
+            if len(time_key) >= 6:
+                hour = int(time_key[0:2])
+                minute = int(time_key[2:4])
+                second = int(time_key[4:6])
+                # Use actual date from tar_date parameter
+                timestamp = datetime.combine(tar_date, time(hour, minute, second))
+            else:
+                timestamp = None
+        except (ValueError, IndexError):
+            timestamp = None
+
         points.append({
             'lat': lat,
             'lon': lon,
             'speed_kmh': speed_kmh,
             'altitude': altitude,
-            'heading': heading
+            'heading': heading,
+            'timestamp': timestamp if timestamp else datetime.now()
         })
 
     return sorted(points, key=lambda p: (p['lat'], p['lon']))
@@ -305,6 +328,16 @@ def merge_gps_points(rmc_points, gga_points):
 def extract_gps_from_tar(tar_path):
     """Extract all GPS points from tar file."""
     points = []
+
+    # Extract date from TAR filename (e.g., 20260314060147 → 2026-03-14)
+    tar_basename = os.path.basename(tar_path).replace('.git', '')
+    tar_date = None
+    try:
+        if len(tar_basename) >= 8:
+            date_str = tar_basename[:8]  # YYYYMMDD
+            tar_date = datetime.strptime(date_str, '%Y%m%d').date()
+    except ValueError:
+        tar_date = None
 
     try:
         with tarfile.open(tar_path, 'r:') as tar:
@@ -314,7 +347,8 @@ def extract_gps_from_tar(tar_path):
                     if f:
                         nmea_content = f.read().decode('utf-8', errors='ignore')
                         rmc, gga = extract_gps_from_nmea(nmea_content)
-                        merged = merge_gps_points(rmc, gga)
+                        # Pass tar_date to merge_gps_points for correct timestamps
+                        merged = merge_gps_points(rmc, gga, tar_date=tar_date)
                         points.extend(merged)
     except Exception as e:
         pass
@@ -345,12 +379,13 @@ def parse_tar_filename(filename):
     except ValueError:
         return None, None
 
-def detect_trip_groups(tar_files):
-    """Detect trip groups using 30-minute gap threshold."""
+def detect_trip_groups(tar_files, verbose=False):
+    """Detect trip groups using 30-minute gap threshold. Returns (groups, gap_info)."""
     sorted_files = sorted(tar_files)
     groups = []
     current_group = []
     prev_end = None
+    gaps = []  # Track gaps between groups
 
     for tar_path in sorted_files:
         start_utc, duration_s = parse_tar_filename(tar_path)
@@ -361,9 +396,15 @@ def detect_trip_groups(tar_files):
         end_utc = start_utc + timedelta(seconds=duration_s)
 
         # Start new group if gap > threshold or first file
-        if prev_end is None or (start_utc - prev_end).total_seconds() > GAP_THRESHOLD:
+        gap_seconds = (start_utc - prev_end).total_seconds() if prev_end else None
+        if prev_end is None or gap_seconds > GAP_THRESHOLD:
             if current_group:
                 groups.append(current_group)
+                if gap_seconds:
+                    gaps.append({
+                        'gap_minutes': round(gap_seconds / 60, 1),
+                        'between': f"{os.path.basename(current_group[-1])} → {os.path.basename(tar_path)}"
+                    })
             current_group = [tar_path]
         else:
             current_group.append(tar_path)
@@ -373,7 +414,98 @@ def detect_trip_groups(tar_files):
     if current_group:
         groups.append(current_group)
 
-    return groups
+    return groups, gaps
+
+
+def split_group_by_idle(group, idle_gap_minutes=30):
+    """
+    Split a group into sub-trips based on idle periods (low speed).
+    Returns list of (sub_group, trip_info) tuples.
+    """
+    if not group:
+        return []
+
+    # Extract all GPS points from group
+    all_points = []
+    for tar_path in group:
+        points = extract_gps_from_tar(tar_path)
+        all_points.extend(points)
+
+    if not all_points:
+        return [(group, {'label': 'Unknown', 'distance_km': 0, 'duration_min': 0, 'has_gps': False})]
+
+    # Detect idle segments
+    idle_segments = detect_idle_segments(all_points,
+                                         speed_threshold=IDLE_SPEED_THRESHOLD,
+                                         duration_threshold=5 * 60)
+
+    # Find major idle breaks (>idle_gap_minutes)
+    major_idle_breaks = []
+    for seg in idle_segments:
+        if seg['duration_s'] / 60 >= idle_gap_minutes:
+            major_idle_breaks.append(seg)
+
+    # If no major idle breaks, return group as single trip
+    if not major_idle_breaks:
+        first_ts = all_points[0]['timestamp']
+        last_ts = all_points[-1]['timestamp']
+        duration_min = (last_ts - first_ts).total_seconds() / 60
+        distance_km = all_points[-1].get('cumulative_distance_km', 0) - all_points[0].get('cumulative_distance_km', 0)
+        return [(group, {
+            'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')}",
+            'distance_km': distance_km,
+            'duration_min': duration_min,
+            'has_gps': True
+        })]
+
+    # Split group based on idle breaks
+    sub_trips = []
+    for i, idle_break in enumerate(major_idle_breaks):
+        idle_start_idx = idle_break['start_index']
+        idle_end_idx = idle_break['end_index']
+        idle_dur_min = idle_break['duration_s'] / 60
+
+        # Get point ranges for before and after this idle
+        if i == 0:
+            # First trip: from start to this idle
+            trip_points = all_points[:idle_start_idx]
+            if trip_points:
+                first_ts = trip_points[0]['timestamp']
+                last_ts = trip_points[-1]['timestamp']
+                distance_km = trip_points[-1].get('cumulative_distance_km', 0) - trip_points[0].get('cumulative_distance_km', 0)
+                duration_min = (last_ts - first_ts).total_seconds() / 60
+                sub_trips.append((group[:len(group)//2], {  # Rough estimate
+                    'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')} (Drive)",
+                    'distance_km': distance_km,
+                    'duration_min': duration_min,
+                    'has_gps': True
+                }))
+
+        # Add idle period info
+        idle_ts = all_points[idle_start_idx]['timestamp']
+        sub_trips.append(([], {
+            'label': f"{idle_ts.strftime('%H:%M')}-+{idle_dur_min:.0f}min (IDLE)",
+            'distance_km': 0,
+            'duration_min': idle_dur_min,
+            'has_gps': True
+        }))
+
+        # Last trip: from after idle to end
+        if i == len(major_idle_breaks) - 1:
+            trip_points = all_points[idle_end_idx + 1:]
+            if trip_points:
+                first_ts = trip_points[0]['timestamp']
+                last_ts = trip_points[-1]['timestamp']
+                distance_km = trip_points[-1].get('cumulative_distance_km', 0) - trip_points[0].get('cumulative_distance_km', 0)
+                duration_min = (last_ts - first_ts).total_seconds() / 60
+                sub_trips.append((group[len(group)//2:], {
+                    'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')} (Drive)",
+                    'distance_km': distance_km,
+                    'duration_min': duration_min,
+                    'has_gps': True
+                }))
+
+    return sub_trips if sub_trips else [(group, {'label': 'Unknown', 'distance_km': 0, 'duration_min': 0, 'has_gps': False})]
 
 # ============================================================================
 # GPS Utilities
@@ -728,12 +860,58 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} trip groups")
+    print("Step 2: Detecting trip groups (30-min gap threshold + speed analysis)...")
+    groups, gaps = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} groups by time gap")
+
+    # Show chronological range for each group
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
+
+    # Analyze each group for idle-based splits
+    print(f"\n  Analyzing GPS speed within groups...")
+    actual_driving_trips = 0
+    for group_idx, group in enumerate(groups, 1):
+        sub_trips = split_group_by_idle(group, idle_gap_minutes=30)
+        driving_trips = [t for t in sub_trips if t[1].get('distance_km', 0) > 0 and 'Drive' in t[1].get('label', '')]
+        actual_driving_trips += len(driving_trips)
+
+        print(f"  Group {group_idx}: {len(sub_trips)} segments")
+        for sub_idx, (_, trip_info) in enumerate(sub_trips, 1):
+            label = trip_info.get('label', 'Unknown')
+            dist = trip_info.get('distance_km', 0)
+            dur = trip_info.get('duration_min', 0)
+            print(f"    • {label}: {dist:.1f} km in {dur:.1f} min")
+
+    # Show gap information if any
+    if gaps:
+        print(f"\n  ⏱️  Time gaps detected (>{GAP_THRESHOLD//60}min threshold):")
+        for gap in gaps:
+            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+    else:
+        print(f"\n  ℹ️  No time gaps >30min detected")
+
+    print(f"\n  📊 Result: {actual_driving_trips} actual driving trips detected")
     print()
 
     # Step 3: Process each group
