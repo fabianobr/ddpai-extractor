@@ -428,96 +428,6 @@ def detect_trip_groups(tar_files, verbose=False):
     return groups, gaps
 
 
-def split_group_by_idle(group, idle_gap_minutes=30):
-    """
-    Split a group into sub-trips based on idle periods (low speed).
-    Returns list of (sub_group, trip_info) tuples.
-    """
-    if not group:
-        return []
-
-    # Extract all GPS points from group
-    all_points = []
-    for tar_path in group:
-        points = extract_gps_from_tar(tar_path)
-        all_points.extend(points)
-
-    if not all_points:
-        return [(group, {'label': 'Unknown', 'distance_km': 0, 'duration_min': 0, 'has_gps': False})]
-
-    # Detect idle segments
-    idle_segments = detect_idle_segments(all_points,
-                                         speed_threshold=IDLE_SPEED_THRESHOLD,
-                                         duration_threshold=5 * 60)
-
-    # Find major idle breaks (>idle_gap_minutes)
-    major_idle_breaks = []
-    for seg in idle_segments:
-        if seg['duration_s'] / 60 >= idle_gap_minutes:
-            major_idle_breaks.append(seg)
-
-    # If no major idle breaks, return group as single trip
-    if not major_idle_breaks:
-        first_ts = all_points[0]['timestamp']
-        last_ts = all_points[-1]['timestamp']
-        duration_min = (last_ts - first_ts).total_seconds() / 60
-        distance_km = all_points[-1].get('cumulative_distance_km', 0) - all_points[0].get('cumulative_distance_km', 0)
-        return [(group, {
-            'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')}",
-            'distance_km': distance_km,
-            'duration_min': duration_min,
-            'has_gps': True
-        })]
-
-    # Split group based on idle breaks
-    sub_trips = []
-    for i, idle_break in enumerate(major_idle_breaks):
-        idle_start_idx = idle_break['start_index']
-        idle_end_idx = idle_break['end_index']
-        idle_dur_min = idle_break['duration_s'] / 60
-
-        # Get point ranges for before and after this idle
-        if i == 0:
-            # First trip: from start to this idle
-            trip_points = all_points[:idle_start_idx]
-            if trip_points:
-                first_ts = trip_points[0]['timestamp']
-                last_ts = trip_points[-1]['timestamp']
-                distance_km = trip_points[-1].get('cumulative_distance_km', 0) - trip_points[0].get('cumulative_distance_km', 0)
-                duration_min = (last_ts - first_ts).total_seconds() / 60
-                sub_trips.append((group[:len(group)//2], {  # Rough estimate
-                    'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')} (Drive)",
-                    'distance_km': distance_km,
-                    'duration_min': duration_min,
-                    'has_gps': True
-                }))
-
-        # Add idle period info
-        idle_ts = all_points[idle_start_idx]['timestamp']
-        sub_trips.append(([], {
-            'label': f"{idle_ts.strftime('%H:%M')}-+{idle_dur_min:.0f}min (IDLE)",
-            'distance_km': 0,
-            'duration_min': idle_dur_min,
-            'has_gps': True
-        }))
-
-        # Last trip: from after idle to end
-        if i == len(major_idle_breaks) - 1:
-            trip_points = all_points[idle_end_idx + 1:]
-            if trip_points:
-                first_ts = trip_points[0]['timestamp']
-                last_ts = trip_points[-1]['timestamp']
-                distance_km = trip_points[-1].get('cumulative_distance_km', 0) - trip_points[0].get('cumulative_distance_km', 0)
-                duration_min = (last_ts - first_ts).total_seconds() / 60
-                sub_trips.append((group[len(group)//2:], {
-                    'label': f"{first_ts.strftime('%H:%M')}-{last_ts.strftime('%H:%M')} (Drive)",
-                    'distance_km': distance_km,
-                    'duration_min': duration_min,
-                    'has_gps': True
-                }))
-
-    return sub_trips if sub_trips else [(group, {'label': 'Unknown', 'distance_km': 0, 'duration_min': 0, 'has_gps': False})]
-
 # ============================================================================
 # GPS Utilities
 # ============================================================================
@@ -899,20 +809,8 @@ def main():
             last_end = last_start + timedelta(seconds=last_dur)
             print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
 
-    # Analyze each group for idle-based splits
-    print(f"\n  Analyzing GPS speed within groups...")
-    actual_driving_trips = 0
-    for group_idx, group in enumerate(groups, 1):
-        sub_trips = split_group_by_idle(group, idle_gap_minutes=30)
-        driving_trips = [t for t in sub_trips if t[1].get('distance_km', 0) > 0 and 'Drive' in t[1].get('label', '')]
-        actual_driving_trips += len(driving_trips)
-
-        print(f"  Group {group_idx}: {len(sub_trips)} segments")
-        for sub_idx, (_, trip_info) in enumerate(sub_trips, 1):
-            label = trip_info.get('label', 'Unknown')
-            dist = trip_info.get('distance_km', 0)
-            dur = trip_info.get('duration_min', 0)
-            print(f"    • {label}: {dist:.1f} km in {dur:.1f} min")
+    # Note: Idle detection is now purely for visualization/marking (not splitting trips)
+    # Idle segments will be marked within each trip and available in idle_segments output
 
     # Show gap information if any
     if gaps:
