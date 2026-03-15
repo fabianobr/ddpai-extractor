@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
-    discover_videos, validate_group, compute_trip_stats,
+    discover_videos, validate_gps, validate_videos, compute_trip_stats,
     merge_videos, save_merge_report,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
@@ -79,49 +79,134 @@ def process_group(group_idx, group, total_groups, inner_executor):
     front_videos = discover_videos(group, camera='front')
     locked_print(f"  [{group_id}] 🎥 {len(rear_videos)} rear, {len(front_videos)} front")
 
-    # ========== Validate group ==========
-    errors = validate_group(all_points, rear_videos, front_videos)
-    if errors:
-        locked_print(f"  [{group_id}] ⚠️  SKIP: {'; '.join(errors)}")
+    # ========== Validate GPS (mandatory) ==========
+    gps_errors = validate_gps(all_points)
+    if gps_errors:
+        error_msg = '; '.join(gps_errors)
+        locked_print(f"  [{group_id}] ❌ SKIP (GPS): {error_msg}")
         return None, group_merge_info
 
-    locked_print(f"  [{group_id}] ✅ Validation passed")
+    # ========== Validate videos (optional) ==========
+    video_has_errors, video_warnings = validate_videos(rear_videos, front_videos)
+    for line in video_warnings:
+        locked_print(f"  [{group_id}] {line}")
+
+    locked_print(f"  [{group_id}] ✅ GPS validated - proceeding with video processing")
+
+    # Initialize video merge status variables (will be updated below)
+    rear_ok = False
+    front_ok = False
+    video_status = "no_videos"
+    video_notes = "No video files found for either camera"
+
+    # Smart video merge: implement min() count strategy
+    rear_count = len(rear_videos)
+    front_count = len(front_videos)
+
+    if rear_count > 0 and front_count > 0:
+        # Both cameras have videos: use min() to ensure sync
+        merge_count = min(rear_count, front_count)
+        if rear_count != front_count:
+            ignored_count = abs(rear_count - front_count)
+            locked_print(f"  [{group_id}] ⚠️  VIDEO COUNT MISMATCH: {rear_count} rear vs {front_count} front")
+            locked_print(f"  [{group_id}]    Merge strategy: Using min({rear_count}, {front_count}) = {merge_count} pairs")
+            locked_print(f"  [{group_id}]    Will ignore: {ignored_count} extra video(s)")
+
+            # Rediscover with limit to get only the pairs we'll merge
+            rear_videos = discover_videos(group, camera='rear', limit_count=merge_count)
+            front_videos = discover_videos(group, camera='front', limit_count=merge_count)
+        else:
+            locked_print(f"  [{group_id}] ✅ Both cameras matched: {merge_count} pairs ready for merge")
+    elif rear_count > 0:
+        # Only rear videos
+        locked_print(f"  [{group_id}] ⚠️  No front videos available ({rear_count} rear available)")
+    elif front_count > 0:
+        # Only front videos
+        locked_print(f"  [{group_id}] ⚠️  No rear videos available ({front_count} front available)")
+    else:
+        # No videos at all
+        locked_print(f"  [{group_id}] ⚠️  No videos found for either camera")
 
     # ========== Compute stats ==========
     stats = compute_trip_stats(all_points)
     locked_print(f"  [{group_id}] 📊 {stats['distance_km']} km | {stats['duration_min']} min | max {stats['max_speed']} km/h")
 
-    # ========== Merge videos in parallel (rear + front) ==========
-    rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
-    front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
+    # ========== Merge videos in parallel (rear + front) if available ==========
+    if rear_count > 0 and front_count > 0:
+        rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
+        front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
 
-    locked_print(f"  [{group_id}] 🎬 Merging rear + front in parallel...")
+        locked_print(f"  [{group_id}] 🎬 Merging rear + front in parallel...")
 
-    # Submit both rear and front merges to the inner executor
-    fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear')
-    fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front')
+        # Submit both rear and front merges to the inner executor
+        fut_rear = inner_executor.submit(merge_videos, rear_videos, rear_output, 'Rear')
+        fut_front = inner_executor.submit(merge_videos, front_videos, front_output, 'Front')
 
-    # Wait for both to complete
-    rear_ok, rear_debug = fut_rear.result()
-    front_ok, front_debug = fut_front.result()
+        # Wait for both to complete
+        rear_ok, rear_debug = fut_rear.result()
+        front_ok, front_debug = fut_front.result()
 
-    # Collect debug output with thread safety
-    with _PRINT_LOCK:
-        for line in rear_debug + front_debug:
-            print(line, flush=True)
+        # Collect debug output with thread safety
+        with _PRINT_LOCK:
+            for line in rear_debug + front_debug:
+                print(line, flush=True)
 
-    group_merge_info.extend(rear_debug)
-    group_merge_info.extend(front_debug)
+        group_merge_info.extend(rear_debug)
+        group_merge_info.extend(front_debug)
 
-    if not (rear_ok and front_ok):
-        locked_print(f"  [{group_id}] ⚠️  SKIP: video merge failed")
-        return None, group_merge_info
+        # Determine merge status and notes
+        if rear_ok and front_ok:
+            if rear_count != front_count:
+                extra_count = abs(rear_count - front_count)
+                video_status = "ok_with_extras"
+                video_notes = f"Merged {merge_count} rear + {merge_count} front videos ({extra_count} extra video(s) ignored)"
+                locked_print(f"  [{group_id}] ✅ Merged: {merge_count} pairs ({extra_count} extra video(s) ignored)")
+            else:
+                video_status = "ok"
+                video_notes = f"Merged {merge_count} rear + {merge_count} front videos successfully"
+                locked_print(f"  [{group_id}] ✅ Merged: {merge_count} pairs")
+        else:
+            # At least one merge failed - record what happened
+            if not rear_ok and not front_ok:
+                video_status = "merge_failed"
+                video_notes = "Both rear and front video merges failed"
+            elif not rear_ok:
+                video_status = "merge_failed_rear"
+                video_notes = f"Rear video merge failed ({rear_count} rear, {front_count} front files)"
+            else:
+                video_status = "merge_failed_front"
+                video_notes = f"Front video merge failed ({rear_count} rear, {front_count} front files)"
+
+            locked_print(f"  [{group_id}] ⚠️  Video merge failed, but GPS data is valid")
+            locked_print(f"  [{group_id}]    Status: {video_status}")
+
+    elif rear_count > 0:
+        # Only rear videos
+        video_status = "no_front"
+        video_notes = f"Only rear videos available ({rear_count} rear, 0 front)"
+        locked_print(f"  [{group_id}] ⚠️  No front videos, but GPS data is valid")
+
+    elif front_count > 0:
+        # Only front videos
+        video_status = "no_rear"
+        video_notes = f"Only front videos available (0 rear, {front_count} front)"
+        locked_print(f"  [{group_id}] ⚠️  No rear videos, but GPS data is valid")
+
+    else:
+        # No videos at all - but GPS is valid so we include the trip
+        video_status = "no_videos"
+        video_notes = "No video files found for either camera"
+        locked_print(f"  [{group_id}] ⚠️  No videos found, but GPS data is valid")
 
     # ========== Build result dict ==========
     end_date = start_utc + timedelta(minutes=stats['duration_min'])
     label = f"{start_utc.strftime('%b %d')} {start_utc.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
 
     locked_print(f"  [{group_id}] ✅ Done")
+
+    # Build video paths based on merge success
+    video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
+    video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
 
     return {
         'id': group_id,
@@ -132,8 +217,10 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'max_speed': stats['max_speed'],
         'avg_speed': stats['avg_speed'],
         'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']] for p in all_points],
-        'video_rear': f'merged_videos/{group_id}_rear.mp4',
-        'video_front': f'merged_videos/{group_id}_front.mp4',
+        'video_rear': video_rear_path,
+        'video_front': video_front_path,
+        'video_status': video_status,
+        'video_notes': video_notes,
     }, group_merge_info
 
 # ============================================================================

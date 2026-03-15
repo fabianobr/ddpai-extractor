@@ -201,6 +201,43 @@
             word-break: break-all;
         }
 
+        .video-unavailable {
+            color: #999;
+            font-style: italic;
+        }
+
+        .video-not-available {
+            background: #f5f5f5;
+            color: #999;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 6px;
+            border: 2px dashed #ddd;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        #videoStatus {
+            background-color: #fffaeb;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffb300;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        #videoStatus .status-ok {
+            color: #27ae60;
+        }
+
+        #videoStatus .status-warning {
+            color: #e67e22;
+        }
+
+        #videoStatus .status-error {
+            color: #e74c3c;
+        }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
@@ -276,21 +313,30 @@
                 </div>
 
                 <div class="videos-section">
+                    <div id="videoStatus">
+                        <strong>Video Status:</strong> <span id="statusText" class="status-ok">Loading...</span><br>
+                        <strong>Notes:</strong> <span id="notesText">-</span>
+                    </div>
+
                     <div class="videos-grid">
                         <div class="video-card">
-                            <h3>📹 Rear Camera <span class="video-badge" id="rear-badge">--</span></h3>
-                            <video id="video-rear" controls width="100%">
-                                Your browser doesn't support HTML5 video.
-                            </video>
-                            <div class="video-path">📂 <span id="rear-path">-</span></div>
+                            <h3 id="rear-title">📹 Rear Camera <span class="video-badge" id="rear-badge">--</span></h3>
+                            <div id="rear-container">
+                                <video id="video-rear" controls width="100%">
+                                    Your browser doesn't support HTML5 video.
+                                </video>
+                                <div class="video-path">📂 <span id="rear-path">-</span></div>
+                            </div>
                         </div>
 
                         <div class="video-card">
-                            <h3>📹 Front Camera <span class="video-badge" id="front-badge">--</span></h3>
-                            <video id="video-front" controls width="100%">
-                                Your browser doesn't support HTML5 video.
-                            </video>
-                            <div class="video-path">📂 <span id="front-path">-</span></div>
+                            <h3 id="front-title">📹 Front Camera <span class="video-badge" id="front-badge">--</span></h3>
+                            <div id="front-container">
+                                <video id="video-front" controls width="100%">
+                                    Your browser doesn't support HTML5 video.
+                                </video>
+                                <div class="video-path">📂 <span id="front-path">-</span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -430,16 +476,65 @@
         function updateVideos(group, idx) {
             const rearVideo = document.getElementById('video-rear');
             const frontVideo = document.getElementById('video-front');
-
-            rearVideo.src = '../' + group.video_rear;
-            frontVideo.src = '../' + group.video_front;
-
-            document.getElementById('rear-path').textContent = group.video_rear;
-            document.getElementById('front-path').textContent = group.video_front;
+            const rearContainer = document.getElementById('rear-container');
+            const frontContainer = document.getElementById('front-container');
+            const rearTitle = document.getElementById('rear-title');
+            const frontTitle = document.getElementById('front-title');
 
             const badge = `${Math.round(group.duration_min)} MIN`;
-            document.getElementById('rear-badge').textContent = badge;
-            document.getElementById('front-badge').textContent = badge;
+
+            // Handle rear video
+            if (group.video_rear) {
+                rearVideo.src = '../' + group.video_rear;
+                document.getElementById('rear-path').textContent = group.video_rear;
+                document.getElementById('rear-badge').textContent = badge;
+                rearContainer.style.display = 'block';
+                rearTitle.classList.remove('video-unavailable');
+            } else {
+                rearVideo.src = '';
+                rearContainer.innerHTML = '<div class="video-not-available">📹 Rear video not available</div>';
+                rearTitle.classList.add('video-unavailable');
+                document.getElementById('rear-badge').textContent = 'N/A';
+            }
+
+            // Handle front video
+            if (group.video_front) {
+                frontVideo.src = '../' + group.video_front;
+                document.getElementById('front-path').textContent = group.video_front;
+                document.getElementById('front-badge').textContent = badge;
+                frontContainer.style.display = 'block';
+                frontTitle.classList.remove('video-unavailable');
+            } else {
+                frontVideo.src = '';
+                frontContainer.innerHTML = '<div class="video-not-available">📹 Front video not available</div>';
+                frontTitle.classList.add('video-unavailable');
+                document.getElementById('front-badge').textContent = 'N/A';
+            }
+
+            // Display video status and notes
+            updateVideoStatus(group);
+        }
+
+        function updateVideoStatus(group) {
+            const statusEl = document.getElementById('statusText');
+            const notesEl = document.getElementById('notesText');
+            const status = group.video_status || 'unknown';
+            const notes = group.video_notes || 'No additional information';
+
+            // Set status with appropriate styling
+            statusEl.textContent = status.toUpperCase();
+            statusEl.className = '';
+
+            if (status === 'ok') {
+                statusEl.classList.add('status-ok');
+            } else if (status.startsWith('ok_with')) {
+                statusEl.classList.add('status-warning');
+            } else if (status.includes('no_') || status === 'merge_failed') {
+                statusEl.classList.add('status-error');
+            }
+
+            // Set notes
+            notesEl.textContent = notes;
         }
 
         // Initialize on page load
