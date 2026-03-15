@@ -155,13 +155,17 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - **Validation**: Requires valid fix quality + matching lat/lon across RMC/GGA
 
 ### Video Merging
-- **Tool**: FFmpeg with H.264 libx264 re-encoding
-- **Output Resolution**: 720p (scale=-2:720), maintains aspect ratio
-- **Quality**: CRF 26 (good balance for dashcam review footage)
-- **Audio**: AAC 128k
-- **Groups**: Each trip group → 1 rear + 1 front merged file
-- **Performance**: ~15-20 min per long trip (CPU-bound re-encoding with `preset fast`)
-- **Size Reduction**: Input ~30 MB/min → Output ~8 MB/min (~70-75% reduction)
+- **Tool**: FFmpeg with stream copy (default) or H.264 libx264 re-encoding (fallback)
+- **Default Method**: Stream copy (`-c:v copy -c:a copy`) — lossless, instant
+- **Original Resolution**: Preserved (1920x1080 typical dashcam), no scaling
+- **Performance**: ~2-3 min per long trip (I/O bound, just muxing)
+- **File Size**: Original dashcam size (~30 MB/min), no compression
+- **Fallback**: If stream copy fails (incompatible formats), automatically retries with libx264 re-encoding
+- **Fallback Performance**: ~15-20 min per trip, 720p output, ~70% size reduction, CRF 26
+
+**Configuration (in build_database.py):**
+- `merge_videos(..., use_stream_copy=True)` — Use stream copy by default
+- Set `use_stream_copy=False` to force re-encoding (useful for archive/storage-constrained)
 
 ### Dashboard Output
 - **Format**: Static HTML (web/index.html) + external JSON (data/trips.json)
