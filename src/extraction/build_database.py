@@ -294,12 +294,25 @@ def merge_gps_points(rmc_points, gga_points):
         speed_kmh = rmc['speed_knots'] * 1.852  # knots to km/h
         heading = rmc['heading']
 
+        # Parse timestamp from time_key (format: HHMMSS) - assume today's date
+        try:
+            if len(time_key) >= 6:
+                hour = int(time_key[0:2])
+                minute = int(time_key[2:4])
+                second = int(time_key[4:6])
+                timestamp = datetime(2000, 1, 1, hour, minute, second)  # Placeholder date
+            else:
+                timestamp = None
+        except (ValueError, IndexError):
+            timestamp = None
+
         points.append({
             'lat': lat,
             'lon': lon,
             'speed_kmh': speed_kmh,
             'altitude': altitude,
-            'heading': heading
+            'heading': heading,
+            'timestamp': timestamp if timestamp else datetime.now()
         })
 
     return sorted(points, key=lambda p: (p['lat'], p['lon']))
