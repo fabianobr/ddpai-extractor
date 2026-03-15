@@ -238,6 +238,67 @@
             color: #e74c3c;
         }
 
+        /* Idle segment styles */
+        .idle-segment {
+            color: #999;
+            opacity: 0.5;
+            stroke: #888;
+            stroke-width: 3;
+            stroke-dasharray: 5, 5;  /* Dashed line for idle */
+        }
+
+        .active-segment {
+            color: #0066cc;
+            opacity: 0.8;
+            stroke: #0066cc;
+            stroke-width: 3;
+        }
+
+        .idle-info {
+            background-color: #f5f5f5;
+            border-left: 4px solid #999;
+            padding: 8px 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        #trip-details {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        #trip-details h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 12px;
+        }
+
+        .trip-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+
+        .trip-stat:last-child {
+            border-bottom: none;
+        }
+
+        .trip-stat-label {
+            font-weight: 500;
+            color: #555;
+        }
+
+        .trip-stat-value {
+            color: #2c3e50;
+        }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
@@ -295,8 +356,11 @@
                     <div class="sidebar" id="trips-list"></div>
 
                     <div class="content">
-                        <div class="card">
-                            <div id="map"></div>
+                        <div>
+                            <div class="card">
+                                <div id="map"></div>
+                            </div>
+                            <div id="trip-details"></div>
                         </div>
 
                         <div class="charts">
@@ -372,17 +436,20 @@
                 el.classList.toggle('active', i === idx);
             });
 
-            // Update map
-            updateMap(group.points);
+            // Update map with idle segment data
+            updateMap(group.points, group.idle_segments || []);
 
             // Update charts
             updateCharts(group.points);
+
+            // Update trip details and idle segments
+            updateTripDetails(group);
 
             // Update videos
             updateVideos(group, idx);
         }
 
-        function updateMap(points) {
+        function updateMap(points, idleSegments = []) {
             if (!currentMap) {
                 currentMap = L.map('map').setView([-27.5, -48.5], 11);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -396,15 +463,54 @@
                 currentMap.removeLayer(currentPolyline);
             }
 
-            // Draw new route
-            const coords = points.map(p => [p[0], p[1]]);
-            currentPolyline = L.polyline(coords, {
-                color: '#667eea',
-                weight: 3,
-                opacity: 0.8
-            });
-            currentPolyline.addTo(currentMap);
+            // Create index set for idle ranges
+            let idleRanges = new Set();
+            if (idleSegments && idleSegments.length > 0) {
+                for (let idleSeg of idleSegments) {
+                    for (let i = idleSeg.start_index; i <= idleSeg.end_index; i++) {
+                        idleRanges.add(i);
+                    }
+                }
+            }
 
+            // Draw polyline with idle segments styled differently
+            let currentSegment = [];
+            let isIdle = false;
+
+            for (let i = 0; i < points.length; i++) {
+                let point = points[i];
+                let pointIsIdle = idleRanges.has(i);
+
+                // When idle status changes, draw current segment
+                if (pointIsIdle !== isIdle && currentSegment.length > 0) {
+                    L.polyline(currentSegment, {
+                        color: isIdle ? '#999' : '#0066cc',
+                        opacity: isIdle ? 0.5 : 0.8,
+                        weight: isIdle ? 2 : 3,
+                        dashArray: isIdle ? '5,5' : null,
+                        className: isIdle ? 'idle-segment' : 'active-segment'
+                    }).addTo(currentMap);
+
+                    currentSegment = [[point[0], point[1]]];
+                    isIdle = pointIsIdle;
+                } else {
+                    currentSegment.push([point[0], point[1]]);
+                }
+            }
+
+            // Draw final segment
+            if (currentSegment.length > 0) {
+                L.polyline(currentSegment, {
+                    color: isIdle ? '#999' : '#0066cc',
+                    opacity: isIdle ? 0.5 : 0.8,
+                    weight: isIdle ? 2 : 3,
+                    dashArray: isIdle ? '5,5' : null,
+                    className: isIdle ? 'idle-segment' : 'active-segment'
+                }).addTo(currentMap);
+            }
+
+            // Fit bounds to all points
+            const coords = points.map(p => [p[0], p[1]]);
             const bounds = L.latLngBounds(coords);
             currentMap.fitBounds(bounds, {padding: [50, 50]});
         }
@@ -535,6 +641,62 @@
 
             // Set notes
             notesEl.textContent = notes;
+        }
+
+        function updateTripDetails(group) {
+            const detailsDiv = document.getElementById('trip-details');
+            let html = '<h3>Trip Details</h3>';
+
+            // Basic trip statistics
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">Date</span>';
+            html += '<span class="trip-stat-value">' + group.label + '</span>';
+            html += '</div>';
+
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">Distance</span>';
+            html += '<span class="trip-stat-value">' + group.distance_km.toFixed(2) + ' km</span>';
+            html += '</div>';
+
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">Duration</span>';
+            html += '<span class="trip-stat-value">' + group.duration_min.toFixed(1) + ' min</span>';
+            html += '</div>';
+
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">Max Speed</span>';
+            html += '<span class="trip-stat-value">' + group.max_speed.toFixed(1) + ' km/h</span>';
+            html += '</div>';
+
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">Avg Speed</span>';
+            html += '<span class="trip-stat-value">' + group.avg_speed.toFixed(1) + ' km/h</span>';
+            html += '</div>';
+
+            html += '<div class="trip-stat">';
+            html += '<span class="trip-stat-label">GPS Points</span>';
+            html += '<span class="trip-stat-value">' + (group.points ? group.points.length : 0) + ' records</span>';
+            html += '</div>';
+
+            // Add idle segment information
+            if (group.idle_segments && group.idle_segments.length > 0) {
+                html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid #eee;">';
+                html += '<h4 style="font-size: 13px; font-weight: 600; color: #555; margin-top: 12px; margin-bottom: 8px;">⏸ Idle Segments (' + group.idle_segments.length + ')</h4>';
+
+                for (let i = 0; i < group.idle_segments.length; i++) {
+                    let seg = group.idle_segments[i];
+                    html += '<div class="idle-info">';
+                    html += '<strong>Segment ' + (i + 1) + ':</strong> ' +
+                            (seg.duration_s / 60).toFixed(1) + ' min, ' +
+                            seg.distance_km.toFixed(2) + ' km<br>';
+                    html += '<small>GPS Points: ' + (seg.end_index - seg.start_index + 1) + ' records</small>';
+                    html += '</div>';
+                }
+            } else {
+                html += '<div style="padding: 12px 0; color: #999; font-size: 12px;">No idle segments detected</div>';
+            }
+
+            detailsDiv.innerHTML = html;
         }
 
         // Initialize on page load

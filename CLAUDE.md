@@ -200,6 +200,14 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
 - Re-run `./build.sh`
 
+**Change idle detection settings** (src/extraction/build_database.py)
+- Modify `IDLE_SPEED_THRESHOLD` (line 56): default 0.5 km/h — speeds at or below this are "idle"
+- Modify `IDLE_DURATION_THRESHOLD` (line 57): default 300 seconds (5 min) — minimum idle period duration
+- Re-run `./build.sh`
+- Idle segments appear in `data/trips.json` as `idle_segments` array per trip
+- Each segment includes: start_index, end_index, duration_s, distance_km
+- UI visualizes idle periods as dashed gray lines on the map
+
 **Modify video encoding parameters** (src/extraction/build_database.py & src/extraction/build_database_parallel.py)
 - Modify encoding constants at module level (lines 51-53):
   - `OUTPUT_HEIGHT` (default 720) — target resolution
