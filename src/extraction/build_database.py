@@ -905,6 +905,19 @@ def main():
         video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
         video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
 
+        # Add idle segment detection
+        idle_segments = detect_idle_segments(all_points)
+
+        # Convert idle_segments to JSON-serializable format (remove 'points' key for output)
+        idle_segments_json = []
+        for seg in idle_segments:
+            idle_segments_json.append({
+                'start_index': seg['start_index'],
+                'end_index': seg['end_index'],
+                'duration_s': seg['duration_s'],
+                'distance_km': seg['distance_km'],
+            })
+
         # Add to groups data
         groups_data.append({
             'id': group_id,
@@ -918,7 +931,8 @@ def main():
             'video_rear': video_rear_path,
             'video_front': video_front_path,
             'video_status': video_status,
-            'video_notes': video_notes
+            'video_notes': video_notes,
+            'idle_segments': idle_segments_json
         })
 
         valid_count += 1
