@@ -254,7 +254,7 @@ def main():
 
     # Step 2: Detect trip groups
     print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
+    groups, gaps = detect_trip_groups(tar_files)
     print(f"  Detected {len(groups)} trip groups")
 
     # Show chronological range for each group
@@ -265,7 +265,15 @@ def main():
 
         if first_start and last_start and last_dur:
             last_end = last_start + timedelta(seconds=last_dur)
-            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')}")
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
+
+    # Show gap information if any
+    if gaps:
+        print(f"\n  ⏱️  Gaps detected (>30min threshold):")
+        for gap in gaps:
+            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+    else:
+        print(f"\n  ℹ️  No gaps >30min detected — all {len(tar_files)} files in continuous sequence")
     print()
 
     # Step 3: Process groups in parallel

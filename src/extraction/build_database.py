@@ -347,12 +347,13 @@ def parse_tar_filename(filename):
     except ValueError:
         return None, None
 
-def detect_trip_groups(tar_files):
-    """Detect trip groups using 30-minute gap threshold."""
+def detect_trip_groups(tar_files, verbose=False):
+    """Detect trip groups using 30-minute gap threshold. Returns (groups, gap_info)."""
     sorted_files = sorted(tar_files)
     groups = []
     current_group = []
     prev_end = None
+    gaps = []  # Track gaps between groups
 
     for tar_path in sorted_files:
         start_utc, duration_s = parse_tar_filename(tar_path)
@@ -363,9 +364,15 @@ def detect_trip_groups(tar_files):
         end_utc = start_utc + timedelta(seconds=duration_s)
 
         # Start new group if gap > threshold or first file
-        if prev_end is None or (start_utc - prev_end).total_seconds() > GAP_THRESHOLD:
+        gap_seconds = (start_utc - prev_end).total_seconds() if prev_end else None
+        if prev_end is None or gap_seconds > GAP_THRESHOLD:
             if current_group:
                 groups.append(current_group)
+                if gap_seconds:
+                    gaps.append({
+                        'gap_minutes': round(gap_seconds / 60, 1),
+                        'between': f"{os.path.basename(current_group[-1])} → {os.path.basename(tar_path)}"
+                    })
             current_group = [tar_path]
         else:
             current_group.append(tar_path)
@@ -375,7 +382,7 @@ def detect_trip_groups(tar_files):
     if current_group:
         groups.append(current_group)
 
-    return groups
+    return groups, gaps
 
 # ============================================================================
 # GPS Utilities
@@ -819,7 +826,7 @@ def main():
 
     # Step 2: Detect trip groups
     print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
+    groups, gaps = detect_trip_groups(tar_files)
     print(f"  Detected {len(groups)} trip groups")
 
     # Show chronological range for each group
@@ -830,7 +837,15 @@ def main():
 
         if first_start and last_start and last_dur:
             last_end = last_start + timedelta(seconds=last_dur)
-            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')}")
+            print(f"  Group {group_idx}: {first_start.strftime('%Y-%m-%d %H:%M:%S')} → {last_end.strftime('%H:%M:%S UTC')} ({len(group)} files)")
+
+    # Show gap information if any
+    if gaps:
+        print(f"\n  ⏱️  Gaps detected (>{GAP_THRESHOLD//60}min threshold):")
+        for gap in gaps:
+            print(f"     • {gap['gap_minutes']} min gap: {gap['between']}")
+    else:
+        print(f"\n  ℹ️  No gaps >30min detected — all {len(tar_files)} files in continuous sequence")
     print()
 
     # Step 3: Process each group
