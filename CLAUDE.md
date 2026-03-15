@@ -30,8 +30,9 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 4. **PR:** Push branch and create a Pull Request on GitHub
 5. **Review:** Get approval before merging to main
 6. **Merge:** Merge via GitHub (never force-push)
+7. **Sync:** After merge to main, sync develop branch: `git checkout develop && git merge main && git push origin develop && git checkout main`
 
-**Why:** This ensures code quality, test coverage, and a clean git history.
+**Why:** This ensures code quality, test coverage, a clean git history, and keeps develop branch in sync with main after each release.
 
 **For Claude Code:** Use `/verify-before-completion` skill before marking work done.
 

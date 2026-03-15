@@ -20,7 +20,7 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python3 -m py_compile src/*.py
+          python3 -m py_compile src/extraction/*.py src/processing/*.py src/video/*.py
           echo "✓ Python syntax check passed"
 
       - name: Install shellcheck
@@ -28,7 +28,7 @@ jobs:
 
       - name: Lint shell scripts
         run: |
-          shellcheck build.sh run.sh build_parallel.sh debug_videos.sh install_fftools.sh || true
+          shellcheck build.sh run.sh tools/build_parallel.sh tools/debug_videos.sh tools/install_fftools.sh || true
           echo "✓ Shell script lint complete"
 
       - name: Validate README
