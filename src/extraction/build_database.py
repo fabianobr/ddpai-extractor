@@ -602,7 +602,29 @@ def get_video_size_mb(video_path):
     except:
         return None
 
-def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
+def validate_video_output(output_path, expected_duration=None):
+    """Validate video output file. Returns (success: bool, message: str)."""
+    # Check file exists and has content
+    if not os.path.exists(output_path):
+        return False, f"Output file not created: {output_path}"
+
+    file_size = os.path.getsize(output_path)
+    if file_size < 1000:
+        return False, f"Output file too small ({file_size} bytes): {output_path}"
+
+    # Optional: check duration if expected_duration provided
+    if expected_duration is not None:
+        actual_duration = get_video_duration(output_path)
+        if actual_duration is not None:
+            # Allow 5% tolerance
+            tolerance = expected_duration * 0.05
+            if abs(actual_duration - expected_duration) > tolerance:
+                return False, (f"Duration mismatch: expected {expected_duration:.1f}s, "
+                             f"got {actual_duration:.1f}s (> 5% tolerance)")
+
+    return True, f"Output file valid: {os.path.basename(output_path)} ({file_size / (1024*1024):.1f} MB)"
+
+def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, use_stream_copy=True):
     """Merge multiple video files using ffmpeg with detailed logging."""
     debug_info = []
 
@@ -669,51 +691,96 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
             debug_info.append(f"  {idx}. {video}")
         concat_file.close()
 
-        # Run ffmpeg
-        debug_info.append(f"\nRunning FFmpeg...")
+        # Run ffmpeg with stream copy or re-encoding
+        merge_method = "stream copy" if use_stream_copy else "H.264 re-encoding"
+        timeout_seconds = 300 if use_stream_copy else 1800
+
+        debug_info.append(f"\nRunning FFmpeg ({merge_method})...")
+
+        # Build FFmpeg command
         cmd = [
             'ffmpeg',
             '-f', 'concat',
             '-safe', '0',
             '-i', concat_file.name,
-            '-vf', f'scale=-2:{OUTPUT_HEIGHT}',
-            '-c:v', 'libx264',
-            '-crf', str(VIDEO_CRF),
-            '-preset', VIDEO_PRESET,
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-y',
-            output_path
         ]
 
+        if use_stream_copy:
+            # Stream copy: fast, no re-encoding
+            cmd.extend(['-c:v', 'copy', '-c:a', 'copy', '-y', output_path])
+        else:
+            # H.264 re-encoding: slower, compressed
+            cmd.extend([
+                '-vf', f'scale=-2:{OUTPUT_HEIGHT}',
+                '-c:v', 'libx264',
+                '-crf', str(VIDEO_CRF),
+                '-preset', VIDEO_PRESET,
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-y',
+                output_path
+            ])
+
         debug_info.append(f"Command: {' '.join(cmd)}\n")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
 
         if result.returncode == 0:
-            # Get output file info
-            out_size = get_video_size_mb(output_path)
-            out_duration = get_video_duration(output_path)
+            # Validate output file
+            is_valid, validation_msg = validate_video_output(output_path, total_duration if has_duration_info else None)
 
-            debug_info.append(f"\n✅ Merge successful!")
-            debug_info.append(f"Output: {os.path.basename(output_path)}")
+            if is_valid:
+                # Get output file info
+                out_size = get_video_size_mb(output_path)
+                out_duration = get_video_duration(output_path)
 
-            if out_size or out_duration:
-                size_str = f"{out_size:.1f} MB" if out_size else "? MB"
-                if out_duration:
-                    min_str = f" ({int(out_duration/60)} min)"
-                    duration_str = f"{out_duration:.1f}s{min_str}"
+                debug_info.append(f"\n✅ Merge successful ({merge_method})!")
+                debug_info.append(f"Output: {os.path.basename(output_path)}")
+
+                if out_size or out_duration:
+                    size_str = f"{out_size:.1f} MB" if out_size else "? MB"
+                    if out_duration:
+                        min_str = f" ({int(out_duration/60)} min)"
+                        duration_str = f"{out_duration:.1f}s{min_str}"
+                    else:
+                        duration_str = "? s"
+                    debug_info.append(f"  → {size_str} | {duration_str}")
                 else:
-                    duration_str = "? s"
-                debug_info.append(f"  → {size_str} | {duration_str}")
-            else:
-                debug_info.append(f"  (ffprobe not available for details)")
+                    debug_info.append(f"  (ffprobe not available for details)")
 
-            return True, debug_info
+                return True, debug_info
+            else:
+                debug_info.append(f"\n⚠️  Output validation failed: {validation_msg}")
+                # If stream copy failed, try re-encoding as fallback
+                if use_stream_copy:
+                    debug_info.append(f"Falling back to H.264 re-encoding...")
+                    # Clean up invalid output
+                    if os.path.exists(output_path):
+                        try:
+                            os.remove(output_path)
+                        except:
+                            pass
+                    # Recursively call with re-encoding
+                    return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+                else:
+                    return False, debug_info
         else:
-            debug_info.append(f"\n❌ FFmpeg error:")
+            debug_info.append(f"\n❌ FFmpeg error ({merge_method}):")
             error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
             debug_info.append(error_msg)
-            return False, debug_info
+
+            # If stream copy failed, try re-encoding as fallback
+            if use_stream_copy:
+                debug_info.append(f"\nFalling back to H.264 re-encoding...")
+                # Clean up failed output
+                if os.path.exists(output_path):
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                # Recursively call with re-encoding
+                return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+            else:
+                return False, debug_info
 
     except Exception as e:
         debug_info.append(f"❌ Exception: {str(e)}")
