@@ -10,6 +10,8 @@ import json
 import tarfile
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -513,7 +515,7 @@ def get_video_size_mb(video_path):
     except:
         return None
 
-def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
+def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, show_progress=True):
     """Merge multiple video files using ffmpeg with detailed logging."""
     debug_info = []
 
@@ -580,8 +582,11 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
             debug_info.append(f"  {idx}. {video}")
         concat_file.close()
 
-        # Run ffmpeg
-        debug_info.append(f"\nRunning FFmpeg...")
+        # Dynamic timeout: 4× total source duration, minimum 5 min
+        timeout_s = max(300, int(total_duration * 4.0)) if has_duration_info else 1800
+
+        # Run ffmpeg with -progress pipe:1 for live stdout key=value updates
+        debug_info.append(f"\nRunning FFmpeg (timeout: {timeout_s}s)...")
         cmd = [
             'ffmpeg',
             '-f', 'concat',
@@ -593,15 +598,86 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
             '-preset', VIDEO_PRESET,
             '-c:a', 'aac',
             '-b:a', '128k',
+            '-progress', 'pipe:1',
+            '-nostats',
             '-y',
             output_path
         ]
 
         debug_info.append(f"Command: {' '.join(cmd)}\n")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
 
-        if result.returncode == 0:
-            # Get output file info
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Drain stderr in background thread — prevents 64 KB pipe buffer deadlock
+        stderr_lines = []
+        def _drain_stderr():
+            for line in proc.stderr:
+                stderr_lines.append(line.rstrip())
+        stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+        stderr_thread.start()
+
+        wall_start = time.monotonic()
+        encoded_us = 0
+        speed = 0.0
+        total_us = total_duration * 1_000_000 if has_duration_info else 0
+
+        try:
+            for raw_line in proc.stdout:
+                line = raw_line.strip()
+                if line.startswith('out_time_ms='):
+                    try:
+                        encoded_us = int(line.split('=', 1)[1])
+                    except ValueError:
+                        pass
+                elif line.startswith('speed='):
+                    try:
+                        speed = float(line.split('=', 1)[1].rstrip('x'))
+                    except ValueError:
+                        pass
+                elif line == 'progress=end':
+                    break
+
+                # Manual timeout check (runs at ~1 Hz with FFmpeg -progress)
+                if time.monotonic() - wall_start > timeout_s:
+                    proc.kill()
+                    proc.wait()
+                    debug_info.append(f"❌ Timeout: exceeded {timeout_s}s")
+                    return False, debug_info
+
+                # Live progress bar — only in sequential mode
+                if show_progress and total_us > 0:
+                    pct = min(1.0, encoded_us / total_us)
+                    encoded_min = encoded_us / 1_000_000 / 60
+                    total_min = total_duration / 60
+                    bar_filled = int(20 * pct)
+                    bar = '=' * bar_filled + '>' + ' ' * (20 - bar_filled - 1)
+                    if speed > 0:
+                        remaining_s = max(0, (total_us - encoded_us) / 1_000_000) / speed
+                        eta = f"{int(remaining_s / 60)}min"
+                    else:
+                        eta = "?"
+                    speed_str = f"{speed:.1f}x" if speed > 0 else "?"
+                    print(
+                        f"\r  🎥 {camera_type}: [{bar}] {pct*100:.0f}% | "
+                        f"{encoded_min:.0f}/{total_min:.0f} min | Speed: {speed_str} | ETA: {eta}",
+                        end='', flush=True
+                    )
+
+        except KeyboardInterrupt:
+            proc.kill()
+            proc.wait()
+            stderr_thread.join(timeout=2)
+            if show_progress:
+                print()  # clear the \r line
+            sys.exit(1)
+
+        if show_progress and total_us > 0:
+            print()  # final newline after progress bar
+
+        proc.wait()
+        stderr_thread.join(timeout=5)
+
+        if proc.returncode == 0:
             out_size = get_video_size_mb(output_path)
             out_duration = get_video_duration(output_path)
 
@@ -622,8 +698,8 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
             return True, debug_info
         else:
             debug_info.append(f"\n❌ FFmpeg error:")
-            error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
-            debug_info.append(error_msg)
+            error_output = '\n'.join(stderr_lines[-20:]) if stderr_lines else '(no stderr captured)'
+            debug_info.append(error_output[-500:])
             return False, debug_info
 
     except Exception as e:
