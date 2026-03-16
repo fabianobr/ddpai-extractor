@@ -693,9 +693,16 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, us
 
         # Run ffmpeg with stream copy or re-encoding
         merge_method = "stream copy" if use_stream_copy else "H.264 re-encoding"
-        timeout_seconds = 300 if use_stream_copy else 1800
+
+        # Dynamic timeout: 1 second per 10 MB of input (≈10 MB/s conservative USB read speed)
+        # Min 300s for small groups; no cap — front camera 48-file groups reach 7+ GB
+        if use_stream_copy:
+            timeout_seconds = max(300, int(total_size / 10) + 120) if has_size_info else 1800
+        else:
+            timeout_seconds = 1800
 
         debug_info.append(f"\nRunning FFmpeg ({merge_method})...")
+        debug_info.append(f"Timeout: {timeout_seconds}s (based on {total_size:.0f} MB input)")
 
         # Build FFmpeg command
         cmd = [

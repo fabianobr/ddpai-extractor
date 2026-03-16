@@ -114,6 +114,49 @@ class TestStreamCopyMerge(unittest.TestCase):
             # Should return success=True when subprocess.run returns returncode=0 and validation passes
             self.assertTrue(success, "merge_videos should return True on success")
 
+    def test_timeout_scales_with_total_size_small_group(self):
+        """Timeout for stream copy should scale with total input size (small group)."""
+        # Small group: 8 files × 150 MB = 1,200 MB
+        # Expected timeout: max(300, int(1200/10) + 120) = max(300, 240) = 300s
+        small_videos = [f'/fake/front_{i:02d}.mp4' for i in range(8)]
+
+        with patch('src.extraction.build_database.get_video_duration', return_value=100), \
+             patch('src.extraction.build_database.get_video_size_mb', return_value=150.0), \
+             patch('src.extraction.build_database.validate_video_output', return_value=(True, "Valid")), \
+             patch('subprocess.run') as mock_run:
+
+            mock_run.return_value = MagicMock(returncode=0)
+            merge_videos(small_videos, self.output_path, use_stream_copy=True)
+
+            # Verify timeout is at least 300s (floor)
+            _, kwargs = mock_run.call_args
+            actual_timeout = kwargs.get('timeout')
+            self.assertGreaterEqual(actual_timeout, 300,
+                f"Small group (1.2 GB) timeout {actual_timeout}s should be >= 300s")
+
+    def test_timeout_scales_with_total_size_large_group(self):
+        """Timeout for stream copy should scale with total input size (large group)."""
+        # Large group: 48 files × 151 MB = 7,248 MB
+        # Expected timeout: max(300, int(7248/10) + 120) = max(300, 844) = 844s
+        large_videos = [f'/fake/front_{i:02d}.mp4' for i in range(48)]
+
+        with patch('src.extraction.build_database.get_video_duration', return_value=100), \
+             patch('src.extraction.build_database.get_video_size_mb', return_value=151.0), \
+             patch('src.extraction.build_database.validate_video_output', return_value=(True, "Valid")), \
+             patch('subprocess.run') as mock_run:
+
+            mock_run.return_value = MagicMock(returncode=0)
+            merge_videos(large_videos, self.output_path, use_stream_copy=True)
+
+            # Verify timeout scales up for large groups (should be > 300)
+            _, kwargs = mock_run.call_args
+            actual_timeout = kwargs.get('timeout')
+            self.assertGreater(actual_timeout, 300,
+                f"Large group (7.2 GB) timeout {actual_timeout}s should be > 300s for stream copy")
+            # Reasonable upper bound (should be < 1800s for stream copy)
+            self.assertLess(actual_timeout, 1800,
+                f"Large group timeout {actual_timeout}s should be < 1800s")
+
 
 class TestStreamCopyIntegration(unittest.TestCase):
     """Integration test: real FFmpeg command execution."""
