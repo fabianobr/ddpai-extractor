@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, timedelta, timezone, time, date
 from collections import defaultdict
+import time as time_module
 
 # Default Configuration
 DEFAULT_WORKING_DIR = '/Users/fabianosilva/Documentos/code/ddpai_extractor/working_data/tar'
@@ -624,6 +625,79 @@ def validate_video_output(output_path, expected_duration=None):
 
     return True, f"Output file valid: {os.path.basename(output_path)} ({file_size / (1024*1024):.1f} MB)"
 
+def calculate_eta(elapsed_seconds, bytes_processed, total_bytes):
+    """
+    Calculate estimated time remaining based on current processing rate.
+
+    Args:
+        elapsed_seconds: Time elapsed so far
+        bytes_processed: Bytes processed so far
+        total_bytes: Total bytes to process
+
+    Returns:
+        (estimated_seconds, estimated_minutes) or (None, None) if can't estimate
+    """
+    if elapsed_seconds <= 0 or bytes_processed <= 0:
+        return None, None
+
+    try:
+        bytes_per_second = bytes_processed / elapsed_seconds
+        remaining_bytes = total_bytes - bytes_processed
+
+        if remaining_bytes <= 0:
+            return 0, 0
+
+        estimated_remaining = remaining_bytes / bytes_per_second
+        estimated_total = elapsed_seconds + estimated_remaining
+        estimated_minutes = estimated_total / 60
+
+        return estimated_total, estimated_minutes
+    except (ZeroDivisionError, TypeError):
+        return None, None
+
+
+def format_retry_message(attempt, current_timeout, new_timeout, total_size, file_count):
+    """
+    Format console message for timeout retry event.
+
+    Args:
+        attempt: Retry attempt number (1, 2, etc.)
+        current_timeout: Current timeout in seconds
+        new_timeout: New timeout in seconds
+        total_size: Total input size in MB
+        file_count: Number of video files
+
+    Returns:
+        Formatted message string
+    """
+    percent_increase = int(((new_timeout - current_timeout) / current_timeout) * 100)
+    message = f"⏱️  TIMEOUT: Stream copy exceeded {current_timeout}s limit\n"
+    message += f"  → Input: {file_count} files, {total_size:.1f} GB total\n"
+    message += f"  → Retrying with {new_timeout}s timeout ({percent_increase}% increase)...\n"
+    return message
+
+
+def format_failure_message(max_timeout, tier1_timeout, tier2_timeout, tier3_timeout):
+    """
+    Format console message for timeout failure (all retries exhausted).
+
+    Args:
+        max_timeout: Final timeout value reached
+        tier1_timeout: Initial timeout (Tier 1)
+        tier2_timeout: First retry timeout (Tier 2)
+        tier3_timeout: Second retry timeout (Tier 3)
+
+    Returns:
+        Formatted message string
+    """
+    message = f"❌ FAILED: Stream copy timed out after 2 retries (final limit: {max_timeout}s)\n"
+    message += f"  → All 3 attempts exhausted: {tier1_timeout}s → {tier2_timeout}s → {tier3_timeout}s\n"
+    message += f"  → Suggestions:\n"
+    message += f"    1. Retry with re-encoding: use_stream_copy=False\n"
+    message += f"    2. Split large groups: merge manually in smaller batches\n"
+    message += f"    3. Check system resources: CPU/disk I/O may be constrained\n"
+    return message
+
 def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, use_stream_copy=True):
     """Merge multiple video files using ffmpeg with detailed logging."""
     debug_info = []
@@ -729,65 +803,135 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, us
             ])
 
         debug_info.append(f"Command: {' '.join(cmd)}\n")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
 
-        if result.returncode == 0:
-            # Validate output file
-            is_valid, validation_msg = validate_video_output(output_path, total_duration if has_duration_info else None)
+        # Retry loop: up to 2 retries on timeout
+        max_retries = 2
+        retry_attempt = 0
+        tier_timeouts = [timeout_seconds]  # Track all timeout values for logging
+        start_time = time_module.time()
 
-            if is_valid:
-                # Get output file info
-                out_size = get_video_size_mb(output_path)
-                out_duration = get_video_duration(output_path)
+        while retry_attempt <= max_retries:
+            attempt_number = retry_attempt + 1
+            debug_info.append(f"Attempt {attempt_number}/3: timeout={timeout_seconds}s\n")
 
-                debug_info.append(f"\n✅ Merge successful ({merge_method})!")
-                debug_info.append(f"Output: {os.path.basename(output_path)}")
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
 
-                if out_size or out_duration:
-                    size_str = f"{out_size:.1f} MB" if out_size else "? MB"
-                    if out_duration:
-                        min_str = f" ({int(out_duration/60)} min)"
-                        duration_str = f"{out_duration:.1f}s{min_str}"
+                # Success or non-timeout error — handle normally
+                if result.returncode == 0:
+                    # Validate output file
+                    is_valid, validation_msg = validate_video_output(output_path, total_duration if has_duration_info else None)
+
+                    if is_valid:
+                        # Get output file info
+                        out_size = get_video_size_mb(output_path)
+                        out_duration = get_video_duration(output_path)
+
+                        if retry_attempt > 0:
+                            elapsed_time = int(time_module.time() - start_time)
+                            debug_info.append(f"\n✅ Merge successful on retry! Completed in {elapsed_time}s")
+                        else:
+                            debug_info.append(f"\n✅ Merge successful ({merge_method})!")
+
+                        debug_info.append(f"Output: {os.path.basename(output_path)}")
+
+                        if out_size or out_duration:
+                            size_str = f"{out_size:.1f} MB" if out_size else "? MB"
+                            if out_duration:
+                                min_str = f" ({int(out_duration/60)} min)"
+                                duration_str = f"{out_duration:.1f}s{min_str}"
+                            else:
+                                duration_str = "? s"
+                            debug_info.append(f"  → {size_str} | {duration_str}")
+                        else:
+                            debug_info.append(f"  (ffprobe not available for details)")
+
+                        return True, debug_info
                     else:
-                        duration_str = "? s"
-                    debug_info.append(f"  → {size_str} | {duration_str}")
+                        debug_info.append(f"\n⚠️  Output validation failed: {validation_msg}")
+                        # If stream copy failed, try re-encoding as fallback
+                        if use_stream_copy:
+                            debug_info.append(f"Falling back to H.264 re-encoding...")
+                            # Clean up invalid output
+                            if os.path.exists(output_path):
+                                try:
+                                    os.remove(output_path)
+                                except:
+                                    pass
+                            # Recursively call with re-encoding
+                            return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+                        else:
+                            return False, debug_info
                 else:
-                    debug_info.append(f"  (ffprobe not available for details)")
+                    # Non-zero return code (FFmpeg error, not timeout)
+                    debug_info.append(f"\n❌ FFmpeg error ({merge_method}):")
+                    error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
+                    debug_info.append(error_msg)
 
-                return True, debug_info
-            else:
-                debug_info.append(f"\n⚠️  Output validation failed: {validation_msg}")
-                # If stream copy failed, try re-encoding as fallback
-                if use_stream_copy:
-                    debug_info.append(f"Falling back to H.264 re-encoding...")
-                    # Clean up invalid output
+                    # If stream copy failed, try re-encoding as fallback
+                    if use_stream_copy:
+                        debug_info.append(f"\nFalling back to H.264 re-encoding...")
+                        # Clean up failed output
+                        if os.path.exists(output_path):
+                            try:
+                                os.remove(output_path)
+                            except:
+                                pass
+                        # Recursively call with re-encoding
+                        return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+                    else:
+                        return False, debug_info
+
+            except subprocess.TimeoutExpired as e:
+                # Timeout — try to retry (if retries remaining)
+                elapsed_time = int(time_module.time() - start_time)
+
+                if retry_attempt < max_retries:
+                    # Calculate new timeout (50% increase)
+                    new_timeout = int(timeout_seconds * 1.5)
+                    new_timeout_gib = new_timeout / 60
+
+                    # Print retry message to console
+                    retry_msg = format_retry_message(retry_attempt + 1, timeout_seconds, new_timeout, total_size / 1024, len(sorted_videos))
+                    print(retry_msg)
+                    debug_info.append(retry_msg)
+                    debug_info.append(f"  [Retry {retry_attempt + 1}/2] Merging...\n")
+
+                    # Update timeout for next iteration
+                    timeout_seconds = new_timeout
+                    tier_timeouts.append(timeout_seconds)
+                    retry_attempt += 1
+
+                    # Clean up partial output
                     if os.path.exists(output_path):
                         try:
                             os.remove(output_path)
                         except:
                             pass
-                    # Recursively call with re-encoding
-                    return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
-                else:
-                    return False, debug_info
-        else:
-            debug_info.append(f"\n❌ FFmpeg error ({merge_method}):")
-            error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
-            debug_info.append(error_msg)
 
-            # If stream copy failed, try re-encoding as fallback
-            if use_stream_copy:
-                debug_info.append(f"\nFalling back to H.264 re-encoding...")
-                # Clean up failed output
-                if os.path.exists(output_path):
-                    try:
-                        os.remove(output_path)
-                    except:
-                        pass
-                # Recursively call with re-encoding
-                return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
-            else:
-                return False, debug_info
+                    # Continue to next retry attempt
+                    continue
+                else:
+                    # All retries exhausted
+                    debug_info.append(f"\n❌ FAILED: Stream copy timed out after 2 retries (final limit: {timeout_seconds}s)\n")
+                    debug_info.append(f"  → Elapsed across all attempts: {elapsed_time}s\n")
+
+                    # Print failure message to console
+                    tier1 = tier_timeouts[0] if len(tier_timeouts) > 0 else '?'
+                    tier2 = tier_timeouts[1] if len(tier_timeouts) > 1 else '?'
+                    tier3 = tier_timeouts[2] if len(tier_timeouts) > 2 else '?'
+                    failure_msg = format_failure_message(timeout_seconds, tier1, tier2, tier3)
+                    print(failure_msg)
+                    debug_info.append(failure_msg)
+
+                    # Clean up failed output
+                    if os.path.exists(output_path):
+                        try:
+                            os.remove(output_path)
+                        except:
+                            pass
+
+                    return False, debug_info
 
     except Exception as e:
         debug_info.append(f"❌ Exception: {str(e)}")
