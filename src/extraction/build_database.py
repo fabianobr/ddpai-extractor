@@ -889,7 +889,6 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, us
                 if retry_attempt < max_retries:
                     # Calculate new timeout (50% increase)
                     new_timeout = int(timeout_seconds * 1.5)
-                    new_timeout_gib = new_timeout / 60
 
                     # Print retry message to console
                     retry_msg = format_retry_message(retry_attempt + 1, timeout_seconds, new_timeout, total_size / 1024, len(sorted_videos))
