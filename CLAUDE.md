@@ -200,6 +200,26 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - Sends macOS Notification Center alerts on build complete/failure
 - State file `data/.last_tar_count` tracks TAR file count (gitignored)
 
+**Synchronize video playback with map position**
+```bash
+# Open web/index.html in browser
+./run.sh
+# Then: http://localhost:8000/web/
+# - Select trip with video
+# - Play video: map marker follows playback
+# - Click map: video seeks to that GPS point
+# - Toggle "🔗 Linked" / "🎬 Independent" for rear/front sync modes
+```
+
+**Sync modes:**
+- **Linked (default):** Both rear and front videos stay synchronized
+- **Independent:** Each video syncs to map independently
+
+**Video gap handling:**
+- If video is shorter than GPS data, yellow badge shows "⚠️ Video ended at X:XX"
+- Map remains interactive beyond video end; video freezes at last frame
+- Trust GPS data as source of truth for timeline
+
 **Change trip grouping threshold** (src/extraction/build_database.py)
 - Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
 - Re-run `./build.sh`
