@@ -58,6 +58,89 @@ IDLE_SPEED_THRESHOLD = 0.5          # km/h — speed at or below this is conside
 IDLE_DURATION_THRESHOLD = 5 * 60    # 300 seconds (5 minutes minimum)
 
 # ============================================================================
+# Video Duration Extraction
+# ============================================================================
+
+def extract_video_duration(video_path):
+    """
+    Extract actual video duration using ffprobe.
+
+    Args:
+        video_path: Path to video file
+
+    Returns:
+        float: Duration in seconds, or None if extraction fails
+    """
+    if not os.path.exists(video_path):
+        return None
+
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            video_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+        return None
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
+
+
+def validate_video_gps_duration(video_duration_s, gps_duration_s):
+    """
+    Validate video duration against GPS duration.
+
+    Args:
+        video_duration_s: Video duration in seconds (or None if unavailable)
+        gps_duration_s: GPS data duration in seconds
+
+    Returns:
+        str: "match" | "video_shorter" | "video_longer" | "no_video"
+    """
+    if video_duration_s is None:
+        return "no_video"
+
+    diff_s = abs(video_duration_s - gps_duration_s)
+
+    if diff_s <= 5:
+        return "match"
+    elif video_duration_s < gps_duration_s:
+        return "video_shorter"
+    else:
+        return "video_longer"
+
+
+def compute_sparse_timestamps(points, sample_interval=10):
+    """
+    Compute sparse timestamps at every Nth GPS point.
+
+    Args:
+        points: List of GPS points with 'timestamp' field
+        sample_interval: Sample every Nth point (default: 10)
+
+    Returns:
+        List of dicts: [{"index": 0, "timestamp": "2026-03-14T13:13:46Z"}, ...]
+    """
+    if not points:
+        return []
+
+    sparse = []
+    for i in range(0, len(points), sample_interval):
+        if i < len(points):
+            timestamp = points[i].get('timestamp')
+            if isinstance(timestamp, datetime):
+                sparse.append({
+                    'index': i,
+                    'timestamp': timestamp.isoformat()
+                })
+
+    return sparse
+
+# ============================================================================
 # NMEA Parsing (reused from ddpai_route_improved.py)
 # ============================================================================
 
