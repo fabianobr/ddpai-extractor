@@ -1370,6 +1370,43 @@ def main():
                 'distance_km': seg['distance_km'],
             })
 
+        # Video duration extraction and validation
+        video_duration_rear_s = None
+        video_duration_front_s = None
+        video_duration_status = "no_video"
+
+        if video_rear_path and os.path.exists(video_rear_path):
+            video_duration_rear_s = extract_video_duration(video_rear_path)
+
+        if video_front_path and os.path.exists(video_front_path):
+            video_duration_front_s = extract_video_duration(video_front_path)
+
+        # Use rear video duration for validation (both should match)
+        if video_duration_rear_s is not None:
+            # Calculate GPS duration from timestamps
+            if all_points and all_points[0].get('timestamp') and all_points[-1].get('timestamp'):
+                gps_duration_s = (all_points[-1]['timestamp'] - all_points[0]['timestamp']).total_seconds()
+            else:
+                gps_duration_s = stats['duration_min'] * 60
+
+            video_duration_status = validate_video_gps_duration(video_duration_rear_s, gps_duration_s)
+
+            if video_duration_status == "match":
+                print(f"  ✅ Duration match: video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s")
+            elif video_duration_status == "video_shorter":
+                gap_s = gps_duration_s - video_duration_rear_s
+                print(f"  ⚠️  Video shorter by {gap_s:.1f}s (video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s)")
+            elif video_duration_status == "video_longer":
+                print(f"  ⚠️  Video longer than GPS (possible encoding issue)")
+
+        # Compute sparse timestamps
+        sparse_timestamps = compute_sparse_timestamps(all_points, sample_interval=10)
+
+        # Get start timestamp
+        start_timestamp = None
+        if all_points and all_points[0].get('timestamp'):
+            start_timestamp = all_points[0]['timestamp'].isoformat()
+
         # Add to groups data
         groups_data.append({
             'id': group_id,
@@ -1384,7 +1421,13 @@ def main():
             'video_front': video_front_path,
             'video_status': video_status,
             'video_notes': video_notes,
-            'idle_segments': idle_segments_json
+            'idle_segments': idle_segments_json,
+            # NEW SYNC FIELDS
+            'video_duration_s': video_duration_rear_s,
+            'start_timestamp': start_timestamp,
+            'gps_points_count': len(all_points),
+            'video_duration_status': video_duration_status,
+            'sparse_timestamps': sparse_timestamps
         })
 
         valid_count += 1
