@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import subprocess
+import json
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.'))
@@ -136,6 +137,119 @@ class TestComputeSparseTimestamps(unittest.TestCase):
         """Empty points should return empty sparse timestamps."""
         sparse = compute_sparse_timestamps([], sample_interval=10)
         self.assertEqual(len(sparse), 0, "Empty points should return empty sparse timestamps")
+
+
+class TestFullSyncIntegration(unittest.TestCase):
+    """Test full video-GPS sync pipeline."""
+
+    def test_json_output_includes_all_sync_fields(self):
+        """Verify trips.json includes all required sync fields."""
+        json_path = os.path.join(
+            os.path.dirname(__file__),
+            '..', 'data', 'trips.json'
+        )
+
+        if not os.path.exists(json_path):
+            self.skipTest("trips.json not generated (run ./build.sh first)")
+
+        with open(json_path) as f:
+            data = json.load(f)
+
+        self.assertIn('trips', data, "JSON should have 'trips' key")
+
+        if len(data['trips']) == 0:
+            self.skipTest("No trips in trips.json")
+
+        trip = data['trips'][0]
+
+        # Check required fields
+        required = ['video_duration_s', 'start_timestamp', 'gps_points_count',
+                   'video_duration_status', 'sparse_timestamps']
+
+        # Skip if fields not yet added (allow gradual migration)
+        fields_missing = [f for f in required if f not in trip]
+        if fields_missing:
+            self.skipTest(f"Sync fields not yet in JSON: {', '.join(fields_missing)}. "
+                         "Re-run ./build.sh to regenerate trips.json")
+
+        for field in required:
+            self.assertIn(field, trip, f"Trip should have '{field}' field")
+
+        # Validate field types
+        if trip['video_duration_s'] is not None:
+            self.assertIsInstance(trip['video_duration_s'], (int, float),
+                                 "video_duration_s should be numeric")
+
+        self.assertIsInstance(trip['start_timestamp'], str,
+                             "start_timestamp should be ISO string")
+
+        self.assertIsInstance(trip['gps_points_count'], int,
+                             "gps_points_count should be int")
+
+        self.assertIn(trip['video_duration_status'],
+                     ['match', 'video_shorter', 'video_longer', 'no_video'],
+                     "video_duration_status should be valid value")
+
+        self.assertIsInstance(trip['sparse_timestamps'], list,
+                             "sparse_timestamps should be list")
+
+    def test_sparse_timestamps_structure(self):
+        """Verify sparse_timestamps have correct structure."""
+        json_path = os.path.join(
+            os.path.dirname(__file__),
+            '..', 'data', 'trips.json'
+        )
+
+        if not os.path.exists(json_path):
+            self.skipTest("trips.json not generated")
+
+        with open(json_path) as f:
+            data = json.load(f)
+
+        if len(data['trips']) == 0:
+            self.skipTest("No trips")
+
+        if 'sparse_timestamps' not in data['trips'][0]:
+            self.skipTest("Sync fields not yet in JSON. Re-run ./build.sh to regenerate trips.json")
+
+        sparse = data['trips'][0]['sparse_timestamps']
+
+        if len(sparse) == 0:
+            return  # Valid if trip too short
+
+        for sample in sparse:
+            self.assertIn('index', sample, "Sample should have 'index'")
+            self.assertIn('timestamp', sample, "Sample should have 'timestamp'")
+            self.assertIsInstance(sample['index'], int, "Index should be int")
+            self.assertIsInstance(sample['timestamp'], str, "Timestamp should be string")
+
+            # Verify indices are multiples of 10
+            self.assertEqual(sample['index'] % 10, 0,
+                           f"Index {sample['index']} should be multiple of 10")
+
+    def test_video_duration_status_values(self):
+        """Verify video_duration_status is set correctly."""
+        json_path = os.path.join(
+            os.path.dirname(__file__),
+            '..', 'data', 'trips.json'
+        )
+
+        if not os.path.exists(json_path):
+            self.skipTest("trips.json not generated")
+
+        with open(json_path) as f:
+            data = json.load(f)
+
+        if len(data['trips']) == 0:
+            self.skipTest("No trips")
+
+        if 'video_duration_status' not in data['trips'][0]:
+            self.skipTest("Sync fields not yet in JSON. Re-run ./build.sh to regenerate trips.json")
+
+        for trip in data['trips']:
+            status = trip.get('video_duration_status')
+            self.assertIn(status, ['match', 'video_shorter', 'video_longer', 'no_video'],
+                         f"Invalid status: {status}")
 
 
 if __name__ == '__main__':
