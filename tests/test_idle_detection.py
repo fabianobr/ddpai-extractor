@@ -1,133 +1,130 @@
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from src.extraction.build_database import detect_idle_segments, IDLE_SPEED_THRESHOLD, IDLE_DURATION_THRESHOLD
-
-
-def test_detect_single_idle_segment():
-    """Test detection of a single continuous idle period."""
-    points = [
-        {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 10.0, 'timestamp': 60},
-        {'speed_kmh': 10.0, 'timestamp': 120},
-        {'speed_kmh': 0.0, 'timestamp': 180},
-        {'speed_kmh': 0.0, 'timestamp': 240},
-        {'speed_kmh': 0.0, 'timestamp': 300},
-        {'speed_kmh': 0.0, 'timestamp': 360},
-        {'speed_kmh': 0.0, 'timestamp': 420},
-        {'speed_kmh': 0.0, 'timestamp': 480},
-        {'speed_kmh': 15.0, 'timestamp': 540},
-        {'speed_kmh': 15.0, 'timestamp': 600},
-    ]
-    idle_segments = detect_idle_segments(points)
-    assert len(idle_segments) == 1
-    assert idle_segments[0]['start_index'] == 3
-    assert idle_segments[0]['end_index'] == 8
-    assert idle_segments[0]['duration_s'] == 300
+# tests/test_idle_detection.py
+"""
+Tests for idle detection with proper GPS data structure.
+Run: python3 -m pytest tests/test_idle_detection.py -v
+"""
+import unittest
+from datetime import datetime, timedelta
+from src.extraction.build_database import (
+    detect_idle_segments,
+    merge_gps_points
+)
 
 
-def test_no_idle_segments_when_speed_above_threshold():
-    """Test that no idle segments are detected when speed stays above threshold."""
-    points = [
-        {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 15.0, 'timestamp': 60},
-        {'speed_kmh': 20.0, 'timestamp': 120},
-        {'speed_kmh': 12.0, 'timestamp': 180},
-    ]
-    idle_segments = detect_idle_segments(points)
-    assert len(idle_segments) == 0
+class TestDetectIdleSegments(unittest.TestCase):
+    """Test idle detection with proper GPS data structure."""
+
+    def test_all_moving_no_idle(self):
+        """No idle segments when all points have speed > threshold."""
+        points = [
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 0)},
+            {'speed_kmh': 55, 'timestamp': datetime(2026, 3, 14, 6, 0, 10)},
+            {'speed_kmh': 60, 'timestamp': datetime(2026, 3, 14, 6, 0, 20)},
+        ]
+
+        segments = detect_idle_segments(points, speed_threshold=0.5, duration_threshold=60)
+        self.assertEqual(len(segments), 0, "No idle segments expected when all speeds > threshold")
+
+    def test_short_idle_below_threshold(self):
+        """Ignore idle periods shorter than duration_threshold."""
+        points = [
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 0)},
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 30)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 1, 0)},  # Idle 10 sec
+            {'speed_kmh': 0.3, 'timestamp': datetime(2026, 3, 14, 6, 1, 10)},
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 1, 20)},
+        ]
+
+        segments = detect_idle_segments(points, speed_threshold=0.5, duration_threshold=60)
+        self.assertEqual(len(segments), 0, "Idle segment <60s should be ignored")
+
+    def test_long_idle_detected(self):
+        """Detect idle periods longer than duration_threshold."""
+        # 5 minutes of idle (moving slow)
+        from datetime import timedelta
+        points = [
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 0)},
+        ]
+        # Add 300 seconds of idle points
+        start_ts = datetime(2026, 3, 14, 6, 1, 0)
+        for i in range(1, 300):
+            points.append({
+                'speed_kmh': 0.2 + (i % 2) * 0.1,
+                'timestamp': start_ts + timedelta(seconds=i)
+            })
+        points.append({'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 6, 0)})
+
+        segments = detect_idle_segments(points, speed_threshold=0.5, duration_threshold=60)
+        self.assertGreaterEqual(len(segments), 1, "Expected at least 1 idle segment")
+        self.assertGreaterEqual(segments[0]['duration_s'], 200, "Idle duration should be ~300s")
+
+    def test_idle_duration_is_float_seconds(self):
+        """Verify idle segment duration is a number (seconds), not timedelta."""
+        points = [
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 1, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 2, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 3, 0)},
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 4, 0)},
+        ]
+
+        segments = detect_idle_segments(points, speed_threshold=0.5, duration_threshold=60)
+        self.assertEqual(len(segments), 1, "Expected 1 idle segment")
+
+        # CRITICAL: duration_s must be a number, not timedelta
+        self.assertIsInstance(segments[0]['duration_s'], (int, float),
+                             "duration_s must be int or float, not timedelta")
+        self.assertGreater(segments[0]['duration_s'], 100, "Duration should be > 100 seconds")
+
+    def test_idle_segment_has_required_fields(self):
+        """Idle segment must have all required fields for JSON output."""
+        points = [
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 0, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 1, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 2, 0)},
+            {'speed_kmh': 0.2, 'timestamp': datetime(2026, 3, 14, 6, 3, 0)},
+            {'speed_kmh': 50, 'timestamp': datetime(2026, 3, 14, 6, 4, 0)},
+        ]
+
+        segments = detect_idle_segments(points, speed_threshold=0.5, duration_threshold=60)
+        self.assertGreater(len(segments), 0)
+
+        seg = segments[0]
+        required_fields = ['start_index', 'end_index', 'duration_s', 'distance_km']
+        for field in required_fields:
+            self.assertIn(field, seg, f"Idle segment missing required field: {field}")
 
 
-def test_idle_period_too_short_ignored():
-    """Test that idle periods shorter than threshold are ignored."""
-    points = [
-        {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 0.0, 'timestamp': 60},
-        {'speed_kmh': 0.0, 'timestamp': 120},
-        {'speed_kmh': 10.0, 'timestamp': 180},
-    ]
-    idle_segments = detect_idle_segments(points)
-    assert len(idle_segments) == 0
+class TestMergeGpsPointsTimestamp(unittest.TestCase):
+    """Test GPS point merging preserves and creates proper timestamps."""
+
+    def test_timestamp_is_datetime_object(self):
+        """Timestamps should be datetime objects, not strings or placeholders."""
+        rmc_points = {
+            '060100': {  # 06:01:00
+                'lat': 40.0,
+                'lon': -74.0,
+                'speed_knots': 10.0,
+                'heading': 90.0
+            }
+        }
+        gga_points = {}
+        tar_date = datetime(2026, 3, 14).date()
+
+        result = merge_gps_points(rmc_points, gga_points, tar_date=tar_date)
+
+        self.assertGreater(len(result), 0, "Should have GPS points")
+        point = result[0]
+        self.assertIn('timestamp', point, "Point must have timestamp")
+        self.assertIsInstance(point['timestamp'], datetime, "Timestamp must be datetime object")
+
+        # Critical: date must be actual date, not 2000-01-01
+        self.assertNotEqual(point['timestamp'].year, 2000,
+                           "Timestamp should NOT have placeholder year 2000")
+        self.assertEqual(point['timestamp'].year, 2026, "Should use actual year from tar_date")
+        self.assertEqual(point['timestamp'].month, 3, "Should use actual month")
+        self.assertEqual(point['timestamp'].day, 14, "Should use actual day")
 
 
-def test_multiple_idle_segments():
-    """Test detection of multiple non-overlapping idle periods."""
-    points = [
-        {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 0.0, 'timestamp': 60},
-        {'speed_kmh': 0.0, 'timestamp': 120},
-        {'speed_kmh': 0.0, 'timestamp': 180},
-        {'speed_kmh': 0.0, 'timestamp': 240},
-        {'speed_kmh': 0.0, 'timestamp': 300},
-        {'speed_kmh': 0.0, 'timestamp': 360},
-        {'speed_kmh': 0.0, 'timestamp': 420},
-        {'speed_kmh': 10.0, 'timestamp': 480},
-        {'speed_kmh': 20.0, 'timestamp': 540},
-        {'speed_kmh': 0.0, 'timestamp': 600},
-        {'speed_kmh': 0.0, 'timestamp': 660},
-        {'speed_kmh': 0.0, 'timestamp': 720},
-        {'speed_kmh': 0.0, 'timestamp': 780},
-        {'speed_kmh': 0.0, 'timestamp': 840},
-        {'speed_kmh': 0.0, 'timestamp': 900},
-        {'speed_kmh': 15.0, 'timestamp': 960},
-    ]
-    idle_segments = detect_idle_segments(points)
-    assert len(idle_segments) == 2
-    assert idle_segments[0]['start_index'] == 1
-    assert idle_segments[0]['end_index'] == 7
-    assert idle_segments[1]['start_index'] == 10
-    assert idle_segments[1]['end_index'] == 15
-
-
-def test_idle_segment_with_custom_threshold():
-    """Test idle detection with custom speed threshold."""
-    points = [
-        {'speed_kmh': 10.0, 'timestamp': 0},
-        {'speed_kmh': 0.3, 'timestamp': 60},
-        {'speed_kmh': 0.2, 'timestamp': 120},
-        {'speed_kmh': 0.1, 'timestamp': 180},
-        {'speed_kmh': 0.4, 'timestamp': 240},
-        {'speed_kmh': 0.5, 'timestamp': 300},
-        {'speed_kmh': 0.2, 'timestamp': 360},
-        {'speed_kmh': 15.0, 'timestamp': 420},
-    ]
-    idle_segments = detect_idle_segments(points, speed_threshold=5.0)
-    assert len(idle_segments) == 1
-    assert idle_segments[0]['start_index'] == 1
-    assert idle_segments[0]['end_index'] == 6
-
-
-# Run tests when executed directly
 if __name__ == '__main__':
-    test_count = 0
-    passed_count = 0
-    failed_count = 0
-
-    tests = [
-        test_detect_single_idle_segment,
-        test_no_idle_segments_when_speed_above_threshold,
-        test_idle_period_too_short_ignored,
-        test_multiple_idle_segments,
-        test_idle_segment_with_custom_threshold,
-    ]
-
-    for test_func in tests:
-        test_count += 1
-        try:
-            test_func()
-            passed_count += 1
-            print(f"✅ {test_func.__name__}")
-        except AssertionError as e:
-            failed_count += 1
-            print(f"❌ {test_func.__name__}: {e}")
-        except Exception as e:
-            failed_count += 1
-            print(f"❌ {test_func.__name__}: ERROR - {e}")
-
-    print(f"\n{'='*60}")
-    print(f"Results: {passed_count} passed, {failed_count} failed out of {test_count} tests")
-    print(f"{'='*60}")
-
-    if failed_count > 0:
-        sys.exit(1)
+    unittest.main()

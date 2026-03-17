@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
-    discover_videos, validate_gps, validate_videos, compute_trip_stats,
-    merge_videos, save_merge_report,
+    detect_idle_segments, discover_videos, validate_gps, validate_videos,
+    compute_trip_stats, merge_videos, save_merge_report, is_parking_file,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
     OUTPUT_HEIGHT, VIDEO_CRF, VIDEO_PRESET
@@ -208,6 +208,19 @@ def process_group(group_idx, group, total_groups, inner_executor):
     video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
     video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
 
+    # Add idle segment detection
+    idle_segments = detect_idle_segments(all_points)
+
+    # Convert idle_segments to JSON-serializable format (remove 'points' key for output)
+    idle_segments_json = []
+    for seg in idle_segments:
+        idle_segments_json.append({
+            'start_index': seg['start_index'],
+            'end_index': seg['end_index'],
+            'duration_s': seg['duration_s'],
+            'distance_km': seg['distance_km'],
+        })
+
     return {
         'id': group_id,
         'label': label,
@@ -221,6 +234,7 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'video_front': video_front_path,
         'video_status': video_status,
         'video_notes': video_notes,
+        'idle_segments': idle_segments_json
     }, group_merge_info
 
 # ============================================================================
@@ -237,12 +251,75 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} trip groups")
+    print("Step 2: Detecting trip groups (30-min gap threshold + hybrid parking detection)...")
+    groups, gaps, parking_files = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} driving trip groups by time gap")
+    print(f"  Filtered {len(parking_files)} parking TAR files (distance < 0.6km OR avg_speed < 3.0 km/h)")
+    print()
+
+    # Show detailed info for each driving group
+    print(f"  📊 DRIVING TRIP GROUPS (Time gaps indicate parking periods):")
+    print(f"  {'Grp':<4} {'Start Time':<20} {'End Time':<20} {'Files':<6} {'Distance':<12} {'Duration':<12} {'Max Speed':<12} {'Mode':<12}")
+    print(f"  {'-'*124}")
+
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+
+            # Extract GPS to get stats
+            all_group_points = []
+            for tar_path in group:
+                points = extract_gps_from_tar(tar_path)
+                all_group_points.extend(points)
+
+            if all_group_points:
+                stats = compute_trip_stats(all_group_points)
+                distance = stats['distance_km']
+                duration = stats['duration_min']
+                max_speed = stats['max_speed']
+            else:
+                distance = 0
+                duration = 0
+                max_speed = 0
+
+            start_str = first_start.strftime('%Y-%m-%d %H:%M:%S')
+            end_str = last_end.strftime('%H:%M:%S')
+            mode = "🚗 DRIVING"
+
+            print(f"  {group_idx:<4} {start_str:<20} {end_str:<20} {len(group):<6} {distance:>10.2f}km {duration:>10.1f}min {max_speed:>10.1f}km/h {mode:<12}")
+
+    # Show parking periods (time gaps)
+    if gaps:
+        print(f"\n  ⏱️  PARKING PERIODS (Time gaps >30min between driving groups):")
+        print(f"  {'#':<4} {'Between Files':<50} {'Duration':<12} {'Mode':<12}")
+        print(f"  {'-'*90}")
+
+        for gap_idx, gap in enumerate(gaps, 1):
+            gap_minutes = gap['gap_minutes']
+            between_str = gap['between']
+            print(f"  {gap_idx:<4} {between_str:<50} {gap_minutes:>10.0f}min 🅿️ PARKING")
+    else:
+        print(f"\n  ℹ️  No time gaps >30min detected")
+
+    print(f"\n  📊 Result: {len(groups)} driving trip groups ({len(parking_files)} parking files excluded from processing)")
     print()
 
     # Step 3: Process groups in parallel

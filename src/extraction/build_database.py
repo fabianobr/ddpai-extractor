@@ -11,8 +11,9 @@ import tarfile
 import subprocess
 import tempfile
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time, date
 from collections import defaultdict
+import time as time_module
 
 # Default Configuration
 DEFAULT_WORKING_DIR = '/Users/fabianosilva/Documentos/code/ddpai_extractor/working_data/tar'
@@ -210,8 +211,13 @@ def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
                 idle_end_idx = i - 1
                 idle_points = points[idle_start_idx:idle_end_idx + 1]
 
-                # Calculate duration from first and last timestamp
-                duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+                # Calculate duration from first and last timestamp (convert to seconds)
+                end_time = idle_points[-1].get('timestamp')
+                start_time = idle_points[0].get('timestamp')
+                if end_time and start_time:
+                    duration_s = (end_time - start_time).total_seconds()
+                else:
+                    duration_s = 0
 
                 if duration_s >= duration_threshold:
                     # Calculate distance traveled during idle period
@@ -232,7 +238,13 @@ def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
     if in_idle and idle_start_idx is not None:
         idle_end_idx = len(points) - 1
         idle_points = points[idle_start_idx:idle_end_idx + 1]
-        duration_s = idle_points[-1]['timestamp'] - idle_points[0]['timestamp']
+        # Calculate duration from first and last timestamp (convert to seconds)
+        end_time = idle_points[-1].get('timestamp')
+        start_time = idle_points[0].get('timestamp')
+        if end_time and start_time:
+            duration_s = (end_time - start_time).total_seconds()
+        else:
+            duration_s = 0
 
         if duration_s >= duration_threshold:
             distance_km = sum([p.get('distance_km', 0) for p in idle_points])
@@ -275,8 +287,17 @@ def extract_gps_from_nmea(nmea_content):
 
     return rmc_points, gga_points
 
-def merge_gps_points(rmc_points, gga_points):
-    """Merge RMC and GGA points into comprehensive records."""
+def merge_gps_points(rmc_points, gga_points, tar_date=None):
+    """Merge RMC and GGA points into comprehensive records.
+
+    Args:
+        rmc_points: Dict of RMC GPS records
+        gga_points: Dict of GGA GPS records
+        tar_date: datetime.date object for timestamp (e.g., from TAR filename)
+    """
+    if tar_date is None:
+        tar_date = datetime.now().date()
+
     points = []
 
     for time_key, rmc in rmc_points.items():
@@ -292,12 +313,26 @@ def merge_gps_points(rmc_points, gga_points):
         speed_kmh = rmc['speed_knots'] * 1.852  # knots to km/h
         heading = rmc['heading']
 
+        # Parse timestamp from time_key (format: HHMMSS) with actual date
+        try:
+            if len(time_key) >= 6:
+                hour = int(time_key[0:2])
+                minute = int(time_key[2:4])
+                second = int(time_key[4:6])
+                # Use actual date from tar_date parameter
+                timestamp = datetime.combine(tar_date, time(hour, minute, second))
+            else:
+                timestamp = None
+        except (ValueError, IndexError):
+            timestamp = None
+
         points.append({
             'lat': lat,
             'lon': lon,
             'speed_kmh': speed_kmh,
             'altitude': altitude,
-            'heading': heading
+            'heading': heading,
+            'timestamp': timestamp if timestamp else datetime.now()
         })
 
     return sorted(points, key=lambda p: (p['lat'], p['lon']))
@@ -305,6 +340,16 @@ def merge_gps_points(rmc_points, gga_points):
 def extract_gps_from_tar(tar_path):
     """Extract all GPS points from tar file."""
     points = []
+
+    # Extract date from TAR filename (e.g., 20260314060147 → 2026-03-14)
+    tar_basename = os.path.basename(tar_path).replace('.git', '')
+    tar_date = None
+    try:
+        if len(tar_basename) >= 8:
+            date_str = tar_basename[:8]  # YYYYMMDD
+            tar_date = datetime.strptime(date_str, '%Y%m%d').date()
+    except ValueError:
+        tar_date = None
 
     try:
         with tarfile.open(tar_path, 'r:') as tar:
@@ -314,7 +359,8 @@ def extract_gps_from_tar(tar_path):
                     if f:
                         nmea_content = f.read().decode('utf-8', errors='ignore')
                         rmc, gga = extract_gps_from_nmea(nmea_content)
-                        merged = merge_gps_points(rmc, gga)
+                        # Pass tar_date to merge_gps_points for correct timestamps
+                        merged = merge_gps_points(rmc, gga, tar_date=tar_date)
                         points.extend(merged)
     except Exception as e:
         pass
@@ -345,12 +391,44 @@ def parse_tar_filename(filename):
     except ValueError:
         return None, None
 
-def detect_trip_groups(tar_files):
-    """Detect trip groups using 30-minute gap threshold."""
+def is_parking_file(tar_path):
+    """
+    Hybrid parking detection: Classifies TAR file as parking or driving.
+    Returns True if parking, False if driving.
+    Uses: distance < 0.6 km OR avg_speed < 3.0 km/h (either indicates parked)
+
+    Refined thresholds (from ground truth analysis):
+    - Original: distance < 0.1 km OR avg_speed < 1.5 km/h
+    - Issue: File 18:01 BRT (0.57 km, 3.3 km/h) was wrongly classified as DRIVING
+    - Fix: Increased both thresholds to catch edge cases during parking transitions
+    """
+    points = extract_gps_from_tar(tar_path)
+    if not points or len(points) < 2:
+        return True  # Assume parking if no GPS data
+
+    stats = compute_trip_stats(points)
+    distance = stats['distance_km']
+    avg_speed = stats['avg_speed']
+
+    # Hybrid detection: parking if EITHER condition is true
+    # - distance < 0.6 km: catches short-distance parking/GPS drift
+    # - avg_speed < 3.0 km/h: catches stationary or crawling (parking lot speed)
+    is_parking = (distance < 0.6) or (avg_speed < 3.0)
+    return is_parking
+
+
+def detect_trip_groups(tar_files, verbose=False):
+    """
+    Detect trip groups using 30-minute gap threshold.
+    Pre-filters parking files via is_parking_file() (distance < 0.6 km OR avg_speed < 3.0 km/h) before grouping.
+    Returns (groups, gap_info, parking_files).
+    """
     sorted_files = sorted(tar_files)
     groups = []
     current_group = []
     prev_end = None
+    gaps = []  # Track gaps between groups
+    parking_files = []  # Track filtered parking files
 
     for tar_path in sorted_files:
         start_utc, duration_s = parse_tar_filename(tar_path)
@@ -358,12 +436,23 @@ def detect_trip_groups(tar_files):
         if start_utc is None:
             continue
 
+        # Pre-filter: Skip parking files
+        if is_parking_file(tar_path):
+            parking_files.append(tar_path)
+            continue
+
         end_utc = start_utc + timedelta(seconds=duration_s)
 
         # Start new group if gap > threshold or first file
-        if prev_end is None or (start_utc - prev_end).total_seconds() > GAP_THRESHOLD:
+        gap_seconds = (start_utc - prev_end).total_seconds() if prev_end else None
+        if prev_end is None or gap_seconds > GAP_THRESHOLD:
             if current_group:
                 groups.append(current_group)
+                if gap_seconds:
+                    gaps.append({
+                        'gap_minutes': round(gap_seconds / 60, 1),
+                        'between': f"{os.path.basename(current_group[-1])} → {os.path.basename(tar_path)}"
+                    })
             current_group = [tar_path]
         else:
             current_group.append(tar_path)
@@ -373,7 +462,8 @@ def detect_trip_groups(tar_files):
     if current_group:
         groups.append(current_group)
 
-    return groups
+    return groups, gaps, parking_files
+
 
 # ============================================================================
 # GPS Utilities
@@ -513,7 +603,102 @@ def get_video_size_mb(video_path):
     except:
         return None
 
-def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
+def validate_video_output(output_path, expected_duration=None):
+    """Validate video output file. Returns (success: bool, message: str)."""
+    # Check file exists and has content
+    if not os.path.exists(output_path):
+        return False, f"Output file not created: {output_path}"
+
+    file_size = os.path.getsize(output_path)
+    if file_size < 1000:
+        return False, f"Output file too small ({file_size} bytes): {output_path}"
+
+    # Optional: check duration if expected_duration provided
+    if expected_duration is not None:
+        actual_duration = get_video_duration(output_path)
+        if actual_duration is not None:
+            # Allow 5% tolerance
+            tolerance = expected_duration * 0.05
+            if abs(actual_duration - expected_duration) > tolerance:
+                return False, (f"Duration mismatch: expected {expected_duration:.1f}s, "
+                             f"got {actual_duration:.1f}s (> 5% tolerance)")
+
+    return True, f"Output file valid: {os.path.basename(output_path)} ({file_size / (1024*1024):.1f} MB)"
+
+def calculate_eta(elapsed_seconds, bytes_processed, total_bytes):
+    """
+    Calculate estimated time remaining based on current processing rate.
+
+    Args:
+        elapsed_seconds: Time elapsed so far
+        bytes_processed: Bytes processed so far
+        total_bytes: Total bytes to process
+
+    Returns:
+        (estimated_seconds, estimated_minutes) or (None, None) if can't estimate
+    """
+    if elapsed_seconds <= 0 or bytes_processed <= 0:
+        return None, None
+
+    try:
+        bytes_per_second = bytes_processed / elapsed_seconds
+        remaining_bytes = total_bytes - bytes_processed
+
+        if remaining_bytes <= 0:
+            return 0, 0
+
+        estimated_remaining = remaining_bytes / bytes_per_second
+        estimated_total = elapsed_seconds + estimated_remaining
+        estimated_minutes = estimated_total / 60
+
+        return estimated_total, estimated_minutes
+    except (ZeroDivisionError, TypeError):
+        return None, None
+
+
+def format_retry_message(attempt, current_timeout, new_timeout, total_size, file_count):
+    """
+    Format console message for timeout retry event.
+
+    Args:
+        attempt: Retry attempt number (1, 2, etc.)
+        current_timeout: Current timeout in seconds
+        new_timeout: New timeout in seconds
+        total_size: Total input size in MB
+        file_count: Number of video files
+
+    Returns:
+        Formatted message string
+    """
+    percent_increase = int(((new_timeout - current_timeout) / current_timeout) * 100)
+    message = f"⏱️  TIMEOUT: Stream copy exceeded {current_timeout}s limit\n"
+    message += f"  → Input: {file_count} files, {total_size:.1f} GB total\n"
+    message += f"  → Retrying with {new_timeout}s timeout ({percent_increase}% increase)...\n"
+    return message
+
+
+def format_failure_message(max_timeout, tier1_timeout, tier2_timeout, tier3_timeout):
+    """
+    Format console message for timeout failure (all retries exhausted).
+
+    Args:
+        max_timeout: Final timeout value reached
+        tier1_timeout: Initial timeout (Tier 1)
+        tier2_timeout: First retry timeout (Tier 2)
+        tier3_timeout: Second retry timeout (Tier 3)
+
+    Returns:
+        Formatted message string
+    """
+    message = f"❌ FAILED: Stream copy timed out after 2 retries (final limit: {max_timeout}s)\n"
+    message += f"  → All 3 attempts exhausted: {tier1_timeout}s → {tier2_timeout}s → {tier3_timeout}s\n"
+    message += f"  → Suggestions:\n"
+    message += f"    1. Retry with re-encoding: use_stream_copy=False\n"
+    message += f"    2. Split large groups: merge manually in smaller batches\n"
+    message += f"    3. Check system resources: CPU/disk I/O may be constrained\n"
+    return message
+
+def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None, use_stream_copy=True):
     """Merge multiple video files using ffmpeg with detailed logging."""
     debug_info = []
 
@@ -580,51 +765,172 @@ def merge_videos(video_list, output_path, camera_type='Rear', debug_log=None):
             debug_info.append(f"  {idx}. {video}")
         concat_file.close()
 
-        # Run ffmpeg
-        debug_info.append(f"\nRunning FFmpeg...")
+        # Run ffmpeg with stream copy or re-encoding
+        merge_method = "stream copy" if use_stream_copy else "H.264 re-encoding"
+
+        # Dynamic timeout: 1 second per 10 MB of input (≈10 MB/s conservative USB read speed)
+        # Min 300s for small groups; no cap — front camera 48-file groups reach 7+ GB
+        if use_stream_copy:
+            timeout_seconds = max(300, int(total_size / 10) + 120) if has_size_info else 1800
+        else:
+            timeout_seconds = 1800
+
+        debug_info.append(f"\nRunning FFmpeg ({merge_method})...")
+        debug_info.append(f"Timeout: {timeout_seconds}s (based on {total_size:.0f} MB input)")
+
+        # Build FFmpeg command
         cmd = [
             'ffmpeg',
             '-f', 'concat',
             '-safe', '0',
             '-i', concat_file.name,
-            '-vf', f'scale=-2:{OUTPUT_HEIGHT}',
-            '-c:v', 'libx264',
-            '-crf', str(VIDEO_CRF),
-            '-preset', VIDEO_PRESET,
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-y',
-            output_path
         ]
 
-        debug_info.append(f"Command: {' '.join(cmd)}\n")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-
-        if result.returncode == 0:
-            # Get output file info
-            out_size = get_video_size_mb(output_path)
-            out_duration = get_video_duration(output_path)
-
-            debug_info.append(f"\n✅ Merge successful!")
-            debug_info.append(f"Output: {os.path.basename(output_path)}")
-
-            if out_size or out_duration:
-                size_str = f"{out_size:.1f} MB" if out_size else "? MB"
-                if out_duration:
-                    min_str = f" ({int(out_duration/60)} min)"
-                    duration_str = f"{out_duration:.1f}s{min_str}"
-                else:
-                    duration_str = "? s"
-                debug_info.append(f"  → {size_str} | {duration_str}")
-            else:
-                debug_info.append(f"  (ffprobe not available for details)")
-
-            return True, debug_info
+        if use_stream_copy:
+            # Stream copy: fast, no re-encoding
+            cmd.extend(['-c:v', 'copy', '-c:a', 'copy', '-y', output_path])
         else:
-            debug_info.append(f"\n❌ FFmpeg error:")
-            error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
-            debug_info.append(error_msg)
-            return False, debug_info
+            # H.264 re-encoding: slower, compressed
+            cmd.extend([
+                '-vf', f'scale=-2:{OUTPUT_HEIGHT}',
+                '-c:v', 'libx264',
+                '-crf', str(VIDEO_CRF),
+                '-preset', VIDEO_PRESET,
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-y',
+                output_path
+            ])
+
+        debug_info.append(f"Command: {' '.join(cmd)}\n")
+
+        # Retry loop: up to 2 retries on timeout
+        max_retries = 2
+        retry_attempt = 0
+        tier_timeouts = [timeout_seconds]  # Track all timeout values for logging
+        start_time = time_module.time()
+
+        while retry_attempt <= max_retries:
+            attempt_number = retry_attempt + 1
+            debug_info.append(f"Attempt {attempt_number}/3: timeout={timeout_seconds}s\n")
+
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
+
+                # Success or non-timeout error — handle normally
+                if result.returncode == 0:
+                    # Validate output file
+                    is_valid, validation_msg = validate_video_output(output_path, total_duration if has_duration_info else None)
+
+                    if is_valid:
+                        # Get output file info
+                        out_size = get_video_size_mb(output_path)
+                        out_duration = get_video_duration(output_path)
+
+                        if retry_attempt > 0:
+                            elapsed_time = int(time_module.time() - start_time)
+                            debug_info.append(f"\n✅ Merge successful on retry! Completed in {elapsed_time}s")
+                        else:
+                            debug_info.append(f"\n✅ Merge successful ({merge_method})!")
+
+                        debug_info.append(f"Output: {os.path.basename(output_path)}")
+
+                        if out_size or out_duration:
+                            size_str = f"{out_size:.1f} MB" if out_size else "? MB"
+                            if out_duration:
+                                min_str = f" ({int(out_duration/60)} min)"
+                                duration_str = f"{out_duration:.1f}s{min_str}"
+                            else:
+                                duration_str = "? s"
+                            debug_info.append(f"  → {size_str} | {duration_str}")
+                        else:
+                            debug_info.append(f"  (ffprobe not available for details)")
+
+                        return True, debug_info
+                    else:
+                        debug_info.append(f"\n⚠️  Output validation failed: {validation_msg}")
+                        # If stream copy failed, try re-encoding as fallback
+                        if use_stream_copy:
+                            debug_info.append(f"Falling back to H.264 re-encoding...")
+                            # Clean up invalid output
+                            if os.path.exists(output_path):
+                                try:
+                                    os.remove(output_path)
+                                except:
+                                    pass
+                            # Recursively call with re-encoding
+                            return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+                        else:
+                            return False, debug_info
+                else:
+                    # Non-zero return code (FFmpeg error, not timeout)
+                    debug_info.append(f"\n❌ FFmpeg error ({merge_method}):")
+                    error_msg = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
+                    debug_info.append(error_msg)
+
+                    # If stream copy failed, try re-encoding as fallback
+                    if use_stream_copy:
+                        debug_info.append(f"\nFalling back to H.264 re-encoding...")
+                        # Clean up failed output
+                        if os.path.exists(output_path):
+                            try:
+                                os.remove(output_path)
+                            except:
+                                pass
+                        # Recursively call with re-encoding
+                        return merge_videos(video_list, output_path, camera_type, debug_log, use_stream_copy=False)
+                    else:
+                        return False, debug_info
+
+            except subprocess.TimeoutExpired as e:
+                # Timeout — try to retry (if retries remaining)
+                elapsed_time = int(time_module.time() - start_time)
+
+                if retry_attempt < max_retries:
+                    # Calculate new timeout (50% increase)
+                    new_timeout = int(timeout_seconds * 1.5)
+
+                    # Print retry message to console
+                    retry_msg = format_retry_message(retry_attempt + 1, timeout_seconds, new_timeout, total_size / 1024, len(sorted_videos))
+                    print(retry_msg)
+                    debug_info.append(retry_msg)
+                    debug_info.append(f"  [Retry {retry_attempt + 1}/2] Merging...\n")
+
+                    # Update timeout for next iteration
+                    timeout_seconds = new_timeout
+                    tier_timeouts.append(timeout_seconds)
+                    retry_attempt += 1
+
+                    # Clean up partial output
+                    if os.path.exists(output_path):
+                        try:
+                            os.remove(output_path)
+                        except:
+                            pass
+
+                    # Continue to next retry attempt
+                    continue
+                else:
+                    # All retries exhausted
+                    debug_info.append(f"\n❌ FAILED: Stream copy timed out after 2 retries (final limit: {timeout_seconds}s)\n")
+                    debug_info.append(f"  → Elapsed across all attempts: {elapsed_time}s\n")
+
+                    # Print failure message to console
+                    tier1 = tier_timeouts[0] if len(tier_timeouts) > 0 else '?'
+                    tier2 = tier_timeouts[1] if len(tier_timeouts) > 1 else '?'
+                    tier3 = tier_timeouts[2] if len(tier_timeouts) > 2 else '?'
+                    failure_msg = format_failure_message(timeout_seconds, tier1, tier2, tier3)
+                    print(failure_msg)
+                    debug_info.append(failure_msg)
+
+                    # Clean up failed output
+                    if os.path.exists(output_path):
+                        try:
+                            os.remove(output_path)
+                        except:
+                            pass
+
+                    return False, debug_info
 
     except Exception as e:
         debug_info.append(f"❌ Exception: {str(e)}")
@@ -728,12 +1034,75 @@ def main():
     print("Step 1: Discovering .git archives...")
     tar_files = sorted(glob.glob(os.path.join(WORKING_DIR, '*.git')))
     print(f"  Found {len(tar_files)} archives")
+    if tar_files:
+        first_name = os.path.basename(tar_files[0])
+        last_name = os.path.basename(tar_files[-1])
+        first_start, first_dur = parse_tar_filename(tar_files[0])
+        last_start, last_dur = parse_tar_filename(tar_files[-1])
+
+        if first_start and last_start:
+            print(f"  First: {first_name}")
+            print(f"         → {first_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"  Last:  {last_name}")
+            print(f"         → {last_start.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
 
     # Step 2: Detect trip groups
-    print("Step 2: Detecting trip groups (30-min gap threshold)...")
-    groups = detect_trip_groups(tar_files)
-    print(f"  Detected {len(groups)} trip groups")
+    print("Step 2: Detecting trip groups (30-min gap threshold + hybrid parking detection)...")
+    groups, gaps, parking_files = detect_trip_groups(tar_files)
+    print(f"  Detected {len(groups)} driving trip groups by time gap")
+    print(f"  Filtered {len(parking_files)} parking TAR files (distance < 0.6km OR avg_speed < 3.0 km/h)")
+    print()
+
+    # Show detailed info for each driving group
+    print(f"  📊 DRIVING TRIP GROUPS (Time gaps indicate parking periods):")
+    print(f"  {'Grp':<4} {'Start Time':<20} {'End Time':<20} {'Files':<6} {'Distance':<12} {'Duration':<12} {'Max Speed':<12} {'Mode':<12}")
+    print(f"  {'-'*124}")
+
+    for group_idx, group in enumerate(groups, 1):
+        first_start, first_dur = parse_tar_filename(group[0])
+        last_tar = group[-1]
+        last_start, last_dur = parse_tar_filename(last_tar)
+
+        if first_start and last_start and last_dur:
+            last_end = last_start + timedelta(seconds=last_dur)
+
+            # Extract GPS to get stats
+            all_group_points = []
+            for tar_path in group:
+                points = extract_gps_from_tar(tar_path)
+                all_group_points.extend(points)
+
+            if all_group_points:
+                stats = compute_trip_stats(all_group_points)
+                distance = stats['distance_km']
+                duration = stats['duration_min']
+                max_speed = stats['max_speed']
+            else:
+                distance = 0
+                duration = 0
+                max_speed = 0
+
+            start_str = first_start.strftime('%Y-%m-%d %H:%M:%S')
+            end_str = last_end.strftime('%H:%M:%S')
+            mode = "🚗 DRIVING"
+
+            print(f"  {group_idx:<4} {start_str:<20} {end_str:<20} {len(group):<6} {distance:>10.2f}km {duration:>10.1f}min {max_speed:>10.1f}km/h {mode:<12}")
+
+    # Show parking periods (time gaps)
+    if gaps:
+        print(f"\n  ⏱️  PARKING PERIODS (Time gaps >30min between driving groups):")
+        print(f"  {'#':<4} {'Between Files':<50} {'Duration':<12} {'Mode':<12}")
+        print(f"  {'-'*90}")
+
+        for gap_idx, gap in enumerate(gaps, 1):
+            gap_minutes = gap['gap_minutes']
+            between_str = gap['between']
+            print(f"  {gap_idx:<4} {between_str:<50} {gap_minutes:>10.0f}min 🅿️ PARKING")
+    else:
+        print(f"\n  ℹ️  No time gaps >30min detected")
+
+    print(f"\n  📊 Result: {len(groups)} driving trip groups ({len(parking_files)} parking files excluded from processing)")
     print()
 
     # Step 3: Process each group
