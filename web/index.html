@@ -299,6 +299,64 @@
             color: #2c3e50;
         }
 
+        /* Sync mode toggle styles */
+        #sync-mode-toggle {
+            margin: 10px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+        }
+
+        #sync-mode-toggle label {
+            font-weight: 600;
+            margin-right: 10px;
+            color: #2c3e50;
+        }
+
+        .sync-btn {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 5px 10px;
+            margin: 0 5px;
+            background: white;
+            color: #2c3e50;
+        }
+
+        .sync-btn:hover {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transform: translateY(-1px);
+        }
+
+        .sync-btn.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        #video-time-indicator {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            font-size: 14px;
+            font-weight: 500;
+            color: #667eea;
+        }
+
+        #video-end-badge {
+            background: #fff3cd;
+            padding: 10px 15px;
+            border-radius: 4px;
+            border: 2px solid #ffc107;
+            color: #856404;
+            font-weight: 600;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
@@ -329,6 +387,71 @@
         let altitudeChart = null;
         let currentMap = null;
         let currentPolyline = null;
+        let currentGroup = null;
+
+        // Sync state management
+        let syncState = {
+            mode: 'linked',           // 'independent' or 'linked'
+            activeVideo: null,        // 'rear' or 'front'
+            isSyncing: false,         // prevent circular updates
+            lastUpdateSource: null    // 'video' or 'map'
+        };
+
+        function initializeSyncState() {
+            // Load saved sync mode from localStorage
+            const savedMode = localStorage.getItem('syncMode') || 'linked';
+            syncState.mode = savedMode;
+
+            // Create sync mode toggle button
+            const syncToggle = document.createElement('div');
+            syncToggle.id = 'sync-mode-toggle';
+            syncToggle.innerHTML = `
+                <label>🔄 Sync Mode:</label>
+                <button id="sync-independent" class="sync-btn">
+                    🎬 Independent
+                </button>
+                <button id="sync-linked" class="sync-btn">
+                    🔗 Linked
+                </button>
+            `;
+
+            // Add to page if not exists
+            const container = document.querySelector('.container');
+            const existingToggle = document.getElementById('sync-mode-toggle');
+            if (existingToggle) {
+                existingToggle.remove();
+            }
+            container.insertBefore(syncToggle, document.getElementById('app-content'));
+
+            // Update button styles
+            updateSyncModeButtonStyles();
+
+            // Wire up toggle buttons
+            document.getElementById('sync-independent').addEventListener('click', () => setSyncMode('independent'));
+            document.getElementById('sync-linked').addEventListener('click', () => setSyncMode('linked'));
+        }
+
+        function setSyncMode(newMode) {
+            syncState.mode = newMode;
+            localStorage.setItem('syncMode', newMode);
+            updateSyncModeButtonStyles();
+            console.log(`Sync mode changed to: ${newMode}`);
+        }
+
+        function updateSyncModeButtonStyles() {
+            const indBtn = document.getElementById('sync-independent');
+            const linkBtn = document.getElementById('sync-linked');
+
+            if (indBtn && linkBtn) {
+                if (syncState.mode === 'independent') {
+                    indBtn.classList.add('active');
+                    linkBtn.classList.remove('active');
+                } else {
+                    linkBtn.classList.add('active');
+                    indBtn.classList.remove('active');
+                }
+            }
+        }
 
         async function loadDatabase() {
             try {
@@ -410,6 +533,9 @@
             if (GROUPS.length > 0) {
                 selectTrip(GROUPS, 0);
             }
+
+            // Initialize sync state management
+            initializeSyncState();
         }
 
         function renderTripList(GROUPS) {
@@ -430,6 +556,7 @@
 
         function selectTrip(GROUPS, idx) {
             const group = GROUPS[idx];
+            currentGroup = group;
 
             // Update sidebar
             document.querySelectorAll('.trip-item').forEach((el, i) => {
@@ -445,8 +572,166 @@
             // Update trip details and idle segments
             updateTripDetails(group);
 
-            // Update videos
+            // Update videos and attach sync listeners
             updateVideos(group, idx);
+
+            // Attach sync listeners after videos are loaded
+            setTimeout(() => {
+                const rearVideo = document.getElementById('video-rear');
+                const frontVideo = document.getElementById('video-front');
+                if (rearVideo || frontVideo) {
+                    attachVideoSyncListeners(rearVideo, frontVideo);
+                }
+            }, 100);
+        }
+
+        function attachVideoSyncListeners(rearVideo, frontVideo) {
+            // Attach video timeupdate/seeking listeners to sync with map
+            function onVideoTimeUpdate(e, videoType) {
+                if (syncState.isSyncing || !currentGroup) return;
+
+                syncState.isSyncing = true;
+                syncState.lastUpdateSource = 'video';
+
+                const videoElement = e.target;
+                const currentTime = videoElement.currentTime;
+                const gps_duration_s = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
+                const points = currentGroup.points;
+
+                if (!gps_duration_s || !points || points.length === 0) {
+                    syncState.isSyncing = false;
+                    return;
+                }
+
+                // Linear interpolation: map video time to GPS index
+                const gpsIndex = Math.floor((currentTime / gps_duration_s) * points.length);
+                const clampedIndex = Math.max(0, Math.min(gpsIndex, points.length - 1));
+
+                updateMapMarker(clampedIndex);
+                showVideoTimeIndicator(currentTime, gps_duration_s);
+
+                // Handle video end
+                if (currentTime >= gps_duration_s - 0.5) {
+                    showVideoEndBadge(currentGroup);
+                }
+
+                syncState.isSyncing = false;
+            }
+
+            function onVideoSeeking(e, videoType) {
+                if (syncState.isSyncing) return;
+                syncState.lastUpdateSource = 'video';
+
+                const videoElement = e.target;
+                const seekTime = videoElement.currentTime;
+
+                // If linked mode, sync the other video
+                if (syncState.mode === 'linked') {
+                    if (videoType === 'rear' && frontVideo && frontVideo.src) {
+                        frontVideo.currentTime = seekTime;
+                    } else if (videoType === 'front' && rearVideo && rearVideo.src) {
+                        rearVideo.currentTime = seekTime;
+                    }
+                }
+            }
+
+            // Remove existing listeners to prevent duplicates
+            if (rearVideo) {
+                const newRearVideo = rearVideo.cloneNode(true);
+                rearVideo.parentNode.replaceChild(newRearVideo, rearVideo);
+                rearVideo = newRearVideo;
+            }
+            if (frontVideo) {
+                const newFrontVideo = frontVideo.cloneNode(true);
+                frontVideo.parentNode.replaceChild(newFrontVideo, frontVideo);
+                frontVideo = newFrontVideo;
+            }
+
+            // Attach listeners
+            if (rearVideo) {
+                rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
+                rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
+                rearVideo.addEventListener('play', () => { syncState.activeVideo = 'rear'; });
+            }
+
+            if (frontVideo) {
+                frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
+                frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
+                frontVideo.addEventListener('play', () => { syncState.activeVideo = 'front'; });
+            }
+        }
+
+        function updateMapMarker(gpsIndex) {
+            // Update map marker to show GPS point at given index
+            if (!currentGroup || !currentGroup.points || gpsIndex >= currentGroup.points.length) {
+                return;
+            }
+
+            const point = currentGroup.points[gpsIndex];
+            const [lat, lon, speed, altitude, distance] = point;
+
+            // Remove old marker if exists
+            if (window.currentMarker) {
+                currentMap.removeLayer(window.currentMarker);
+            }
+
+            // Add new marker with blue circle icon
+            window.currentMarker = L.marker([lat, lon], {
+                icon: L.icon({
+                    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI4IiBmaWxsPSIjMDA4MEZGIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==',
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                })
+            }).addTo(currentMap).bindPopup(`
+                <b>Current Position</b><br/>
+                Speed: ${speed.toFixed(1)} km/h<br/>
+                Altitude: ${altitude.toFixed(1)} m<br/>
+                Distance: ${distance.toFixed(2)} km
+            `);
+
+            // Pan map to marker
+            currentMap.setView([lat, lon], currentMap.getZoom());
+        }
+
+        function showVideoTimeIndicator(currentTime, totalTime) {
+            // Show current video time on map as overlay
+            if (!window.timeIndicator) {
+                window.timeIndicator = L.control({position: 'topleft'});
+                window.timeIndicator.onAdd = function(map) {
+                    let div = L.DomUtil.create('div', 'info');
+                    div.id = 'video-time-indicator';
+                    return div;
+                };
+                window.timeIndicator.addTo(currentMap);
+            }
+
+            const indicator = document.getElementById('video-time-indicator');
+            if (indicator) {
+                const timeStr = `${Math.floor(currentTime / 60)}:${String(Math.floor(currentTime % 60)).padStart(2, '0')}`;
+                const totalStr = `${Math.floor(totalTime / 60)}:${String(Math.floor(totalTime % 60)).padStart(2, '0')}`;
+                indicator.innerHTML = `<b>▶ Video:</b> ${timeStr} / ${totalStr}`;
+            }
+        }
+
+        function showVideoEndBadge(group) {
+            // Show badge when video ends before GPS data ends
+            const endTime = group.video_duration_s || (group.duration_min * 60);
+            const endTimeStr = `${Math.floor(endTime / 60)}:${String(Math.floor(endTime % 60)).padStart(2, '0')}`;
+
+            if (!window.endBadge) {
+                window.endBadge = L.control({position: 'topright'});
+                window.endBadge.onAdd = function(map) {
+                    let div = L.DomUtil.create('div');
+                    div.id = 'video-end-badge';
+                    return div;
+                };
+                window.endBadge.addTo(currentMap);
+            }
+
+            const badge = document.getElementById('video-end-badge');
+            if (badge) {
+                badge.innerHTML = `⚠️ <b>Video ended at ${endTimeStr}</b>`;
+            }
         }
 
         function updateMap(points, idleSegments = []) {
@@ -513,6 +798,56 @@
             const coords = points.map(p => [p[0], p[1]]);
             const bounds = L.latLngBounds(coords);
             currentMap.fitBounds(bounds, {padding: [50, 50]});
+
+            // Add map click handler for syncing
+            currentMap.off('click');
+            currentMap.on('click', function(e) {
+                if (syncState.isSyncing) return;
+
+                syncState.isSyncing = true;
+                syncState.lastUpdateSource = 'map';
+
+                // Find closest GPS point to click
+                const clickLat = e.latlng.lat;
+                const clickLon = e.latlng.lng;
+
+                let closestIndex = 0;
+                let closestDist = Infinity;
+
+                points.forEach((point, idx) => {
+                    const [lat, lon] = point;
+                    const dist = Math.pow(lat - clickLat, 2) + Math.pow(lon - clickLon, 2);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestIndex = idx;
+                    }
+                });
+
+                // Calculate seek time
+                const gps_duration_s = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
+                const seekTime = (closestIndex / points.length) * gps_duration_s;
+
+                // Seek video(s)
+                const rearVideo = document.getElementById('video-rear');
+                const frontVideo = document.getElementById('video-front');
+
+                if (syncState.mode === 'linked') {
+                    if (rearVideo && rearVideo.src) rearVideo.currentTime = seekTime;
+                    if (frontVideo && frontVideo.src) frontVideo.currentTime = seekTime;
+                } else {
+                    // Independent mode: only seek the active video
+                    if (syncState.activeVideo === 'rear' && rearVideo && rearVideo.src) {
+                        rearVideo.currentTime = seekTime;
+                    } else if (syncState.activeVideo === 'front' && frontVideo && frontVideo.src) {
+                        frontVideo.currentTime = seekTime;
+                    } else if (rearVideo && rearVideo.src) {
+                        rearVideo.currentTime = seekTime;
+                    }
+                }
+
+                updateMapMarker(closestIndex);
+                syncState.isSyncing = false;
+            });
         }
 
         function updateCharts(points) {
