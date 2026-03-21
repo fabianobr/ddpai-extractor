@@ -389,6 +389,7 @@
         let currentMap = null;
         let currentPolyline = null;
         let currentGroup = null;
+        let currentPlayheadIndex = 0;  // Track playhead position for charts
 
         // Sync state management
         let syncState = {
@@ -397,6 +398,48 @@
             isSyncing: false,         // prevent circular updates
             lastUpdateSource: null    // 'video' or 'map'
         };
+
+        // Custom Chart.js plugin to draw playhead line
+        const playheadPlugin = {
+            id: 'playhead',
+            afterDatasetsDraw(chart) {
+                if (currentPlayheadIndex === undefined || currentPlayheadIndex === null) return;
+
+                const xScale = chart.scales.x;
+                const yScale = chart.scales.y;
+                const ctx = chart.ctx;
+
+                // Get the x pixel position for the current playhead index
+                const xPixel = xScale.getPixelForValue(currentPlayheadIndex);
+
+                if (xPixel === undefined) return;
+
+                // Draw vertical line
+                ctx.save();
+                ctx.strokeStyle = '#FF9800';
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(xPixel, yScale.top);
+                ctx.lineTo(xPixel, yScale.bottom);
+                ctx.stroke();
+
+                // Draw circle at playhead position on first dataset
+                const dataset = chart.data.datasets[0];
+                if (dataset && dataset.data[currentPlayheadIndex] !== undefined) {
+                    const yPixel = yScale.getPixelForValue(dataset.data[currentPlayheadIndex]);
+                    ctx.fillStyle = '#FF9800';
+                    ctx.beginPath();
+                    ctx.arc(xPixel, yPixel, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        };
+
+        // Register the plugin globally
+        Chart.register(playheadPlugin);
 
         function initializeSyncState() {
             // Load saved sync mode from localStorage
@@ -509,20 +552,26 @@
                     <div class="videos-grid">
                         <div class="video-card">
                             <h3 id="rear-title">📹 Rear Camera <span class="video-badge" id="rear-badge">--</span></h3>
-                            <div id="rear-container">
+                            <div id="rear-container" style="position: relative;">
                                 <video id="video-rear" controls width="100%">
                                     Your browser doesn't support HTML5 video.
                                 </video>
+                                <div id="rear-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 10;">
+                                    ⏳ Loading video...
+                                </div>
                                 <div class="video-path">📂 <span id="rear-path">-</span></div>
                             </div>
                         </div>
 
                         <div class="video-card">
                             <h3 id="front-title">📹 Front Camera <span class="video-badge" id="front-badge">--</span></h3>
-                            <div id="front-container">
+                            <div id="front-container" style="position: relative;">
                                 <video id="video-front" controls width="100%">
                                     Your browser doesn't support HTML5 video.
                                 </video>
+                                <div id="front-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 10;">
+                                    ⏳ Loading video...
+                                </div>
                                 <div class="video-path">📂 <span id="front-path">-</span></div>
                             </div>
                         </div>
@@ -591,6 +640,12 @@
             function onVideoTimeUpdate(e, videoType) {
                 if (syncState.isSyncing || !currentGroup) return;
 
+                // FRONT VIDEO IS BASELINE - only sync to front video in linked mode
+                // This prevents the "bouncing" effect from both videos firing timeupdate
+                if (syncState.mode === 'linked' && videoType !== 'front') {
+                    return;  // Ignore rear video updates in linked mode, use front only
+                }
+
                 syncState.isSyncing = true;
                 syncState.lastUpdateSource = 'video';
 
@@ -649,21 +704,22 @@
                 frontVideo = newFrontVideo;
             }
 
-            // Attach listeners with debug logging
+            // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
+                rearVideo.addEventListener('loadstart', () => { document.getElementById('rear-loading').style.display = 'block'; });
+                rearVideo.addEventListener('canplay', () => { document.getElementById('rear-loading').style.display = 'none'; console.log('✅ Rear ready'); });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
-                rearVideo.addEventListener('play', () => { syncState.activeVideo = 'rear'; console.log('▶️ Rear video playing'); });
-                rearVideo.addEventListener('error', (e) => { console.error('❌ Rear video error:', rearVideo.error?.message || e); });
-                rearVideo.addEventListener('canplay', () => { console.log('✅ Rear video ready'); });
+                rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
             }
 
             if (frontVideo) {
+                frontVideo.addEventListener('loadstart', () => { document.getElementById('front-loading').style.display = 'block'; });
+                frontVideo.addEventListener('canplay', () => { document.getElementById('front-loading').style.display = 'none'; console.log('✅ Front ready'); });
+                // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
-                frontVideo.addEventListener('play', () => { syncState.activeVideo = 'front'; console.log('▶️ Front video playing'); });
-                frontVideo.addEventListener('error', (e) => { console.error('❌ Front video error:', frontVideo.error?.message || e); });
-                frontVideo.addEventListener('canplay', () => { console.log('✅ Front video ready'); });
+                frontVideo.addEventListener('error', (e) => { console.error('❌ Front error:', frontVideo.error?.message); });
             }
         }
 
@@ -887,7 +943,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {legend: {display: false}},
+                    plugins: {legend: {display: false}, playhead: {}},
                     scales: {
                         y: {beginAtZero: true},
                         x: {display: false}
@@ -914,30 +970,23 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {legend: {display: false}},
+                    plugins: {legend: {display: false}, playhead: {}},
                     scales: {x: {display: false}}
                 }
             });
         }
 
         function updateChartsPlayhead(pointIndex, points) {
-            """Add a visual playhead to charts showing current position."""
-            // Create vertical line at current position
+            // Update playhead position and redraw charts
+            currentPlayheadIndex = Math.max(0, Math.min(pointIndex, points.length - 1));
+
+            // Trigger redraw of both charts
             if (speedChart) {
-                speedChart.options.plugins.annotation = {
-                    annotations: {
-                        playhead: {
-                            type: 'line',
-                            xMin: pointIndex,
-                            xMax: pointIndex,
-                            borderColor: '#FF6B6B',
-                            borderWidth: 2
-                        }
-                    }
-                };
+                speedChart.draw();
             }
-            // For now, we'll update the title to show position
-            // Full implementation would require Chart.js annotation plugin
+            if (altitudeChart) {
+                altitudeChart.draw();
+            }
         }
 
         function updateVideos(group, idx) {
