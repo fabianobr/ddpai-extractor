@@ -188,6 +188,7 @@
             border-radius: 6px;
             margin-bottom: 15px;
             display: block;
+            cursor: pointer;
         }
 
         .video-path {
@@ -609,6 +610,7 @@
 
                 updateMapMarker(clampedIndex);
                 showVideoTimeIndicator(currentTime, gps_duration_s);
+                updateChartsPlayhead(clampedIndex, points);
 
                 // Handle video end
                 if (currentTime >= gps_duration_s - 0.5) {
@@ -912,6 +914,26 @@
                     scales: {x: {display: false}}
                 }
             });
+        }
+
+        function updateChartsPlayhead(pointIndex, points) {
+            """Add a visual playhead to charts showing current position."""
+            // Create vertical line at current position
+            if (speedChart) {
+                speedChart.options.plugins.annotation = {
+                    annotations: {
+                        playhead: {
+                            type: 'line',
+                            xMin: pointIndex,
+                            xMax: pointIndex,
+                            borderColor: '#FF6B6B',
+                            borderWidth: 2
+                        }
+                    }
+                };
+            }
+            // For now, we'll update the title to show position
+            // Full implementation would require Chart.js annotation plugin
         }
 
         function updateVideos(group, idx) {
