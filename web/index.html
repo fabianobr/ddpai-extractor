@@ -649,17 +649,21 @@
                 frontVideo = newFrontVideo;
             }
 
-            // Attach listeners
+            // Attach listeners with debug logging
             if (rearVideo) {
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
-                rearVideo.addEventListener('play', () => { syncState.activeVideo = 'rear'; });
+                rearVideo.addEventListener('play', () => { syncState.activeVideo = 'rear'; console.log('▶️ Rear video playing'); });
+                rearVideo.addEventListener('error', (e) => { console.error('❌ Rear video error:', rearVideo.error?.message || e); });
+                rearVideo.addEventListener('canplay', () => { console.log('✅ Rear video ready'); });
             }
 
             if (frontVideo) {
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
-                frontVideo.addEventListener('play', () => { syncState.activeVideo = 'front'; });
+                frontVideo.addEventListener('play', () => { syncState.activeVideo = 'front'; console.log('▶️ Front video playing'); });
+                frontVideo.addEventListener('error', (e) => { console.error('❌ Front video error:', frontVideo.error?.message || e); });
+                frontVideo.addEventListener('canplay', () => { console.log('✅ Front video ready'); });
             }
         }
 
@@ -948,7 +952,9 @@
 
             // Handle rear video
             if (group.video_rear) {
-                rearVideo.src = '../' + group.video_rear;
+                const rearSrc = '../' + group.video_rear;
+                rearVideo.src = rearSrc;
+                console.log('🎬 Rear video loading:', rearSrc);
                 document.getElementById('rear-path').textContent = group.video_rear;
                 document.getElementById('rear-badge').textContent = badge;
                 rearContainer.style.display = 'block';
