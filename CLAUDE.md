@@ -81,6 +81,13 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 - 🔴 **MUST** create feature branches (never commit to main/develop directly)
 - 🔴 **MUST** use Conventional Commits for clear history
 
+## Documentation Standards
+
+**Diagrams & Visualizations:**
+- 🔴 **MUST** use Mermaid for all diagrams (flowcharts, architecture, data flow, etc.)
+- Save Mermaid code in design specs and commit to `docs/superpowers/specs/`
+- Renders automatically on GitHub (no external tools needed)
+
 ## Architecture & Workflow
 
 ```

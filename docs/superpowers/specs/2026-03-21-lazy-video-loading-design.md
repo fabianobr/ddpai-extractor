@@ -161,43 +161,16 @@ function selectTrip(GROUPS, idx) {
 
 ## 4. Data Flow Diagram
 
-```
-┌─────────────────────────────────────────┐
-│ User clicks trip in sidebar             │
-└──────────────┬──────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────┐
-│ selectTrip(GROUPS, idx)                 │
-│ ├─ Clear old video.src ('')             │
-│ ├─ Store new paths in data attributes   │
-│ └─ Attach play listeners                │
-└──────────────┬──────────────────────────┘
-               │
-               ▼
-        ┌──────────────┐
-        │ Ready state  │
-        │ (user sees   │
-        │  play icon)  │
-        └──────┬───────┘
-               │
-        ┌──────▼───────────────────────────┐
-        │ User clicks play on video        │
-        └──────┬───────────────────────────┘
-               │
-               ▼
-        ┌────────────────────────────────┐
-        │ play event fires               │
-        │ ├─ Check if src is set         │
-        │ ├─ If not, set from data attr  │
-        │ └─ Remove listener             │
-        └────────────────────────────────┘
-               │
-               ▼
-        ┌────────────────────────────────┐
-        │ Browser downloads video        │
-        │ (loading indicator shows)      │
-        └────────────────────────────────┘
+```mermaid
+graph TD
+    A["User clicks trip in sidebar"] -->|selectTrip| B["Clear old video.src<br/>Store new paths in data attributes<br/>Attach play listeners"]
+    B --> C["Ready state<br/>(user sees play icon)"]
+    C -->|User clicks play| D["play event fires<br/>Check if src is set<br/>Set from data attribute<br/>Remove listener"]
+    D --> E["Browser downloads video<br/>(loading indicator shows)"]
+    E --> F["Video plays"]
+    G["User switches trip"] -.->|Interrupt| D
+    G -.->|Interrupt| E
+    G -->|Clear src| B
 ```
 
 ---
