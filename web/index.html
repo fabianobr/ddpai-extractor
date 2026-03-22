@@ -684,9 +684,9 @@
 
                 // If linked mode, sync the other video
                 if (syncState.mode === 'linked') {
-                    if (videoType === 'rear' && frontVideo && frontVideo.src) {
+                    if (videoType === 'rear' && frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) {
                         frontVideo.currentTime = seekTime;
-                    } else if (videoType === 'front' && rearVideo && rearVideo.src) {
+                    } else if (videoType === 'front' && rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
                     }
                 }
@@ -894,15 +894,15 @@
                 const frontVideo = document.getElementById('video-front');
 
                 if (syncState.mode === 'linked') {
-                    if (rearVideo && rearVideo.src) rearVideo.currentTime = seekTime;
-                    if (frontVideo && frontVideo.src) frontVideo.currentTime = seekTime;
+                    if (rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) rearVideo.currentTime = seekTime;
+                    if (frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) frontVideo.currentTime = seekTime;
                 } else {
                     // Independent mode: only seek the active video
-                    if (syncState.activeVideo === 'rear' && rearVideo && rearVideo.src) {
+                    if (syncState.activeVideo === 'rear' && rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
-                    } else if (syncState.activeVideo === 'front' && frontVideo && frontVideo.src) {
+                    } else if (syncState.activeVideo === 'front' && frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) {
                         frontVideo.currentTime = seekTime;
-                    } else if (rearVideo && rearVideo.src) {
+                    } else if (rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
                     }
                 }
@@ -1025,6 +1025,7 @@
             if (group.video_front) {
                 const frontSrc = '../' + group.video_front;
                 frontVideo.dataset.lazySrc = frontSrc;  // Store for lazy loading
+                console.log('📹 Front video queued (lazy load):', frontSrc);
                 document.getElementById('front-path').textContent = group.video_front;
                 document.getElementById('front-badge').textContent = badge;
                 frontContainer.style.display = 'block';
