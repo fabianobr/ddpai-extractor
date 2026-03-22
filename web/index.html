@@ -999,11 +999,17 @@
 
             const badge = `${Math.round(group.duration_min)} MIN`;
 
+            // Silent cancellation: clear any previous video loads
+            rearVideo.src = '';
+            frontVideo.src = '';
+            rearVideo.dataset.lazySrc = '';
+            frontVideo.dataset.lazySrc = '';
+
             // Handle rear video
             if (group.video_rear) {
                 const rearSrc = '../' + group.video_rear;
-                rearVideo.src = rearSrc;
-                console.log('🎬 Rear video loading:', rearSrc);
+                rearVideo.dataset.lazySrc = rearSrc;  // Store for lazy loading
+                console.log('🎬 Rear video queued (lazy load):', rearSrc);
                 document.getElementById('rear-path').textContent = group.video_rear;
                 document.getElementById('rear-badge').textContent = badge;
                 rearContainer.style.display = 'block';
@@ -1017,7 +1023,8 @@
 
             // Handle front video
             if (group.video_front) {
-                frontVideo.src = '../' + group.video_front;
+                const frontSrc = '../' + group.video_front;
+                frontVideo.dataset.lazySrc = frontSrc;  // Store for lazy loading
                 document.getElementById('front-path').textContent = group.video_front;
                 document.getElementById('front-badge').textContent = badge;
                 frontContainer.style.display = 'block';
@@ -1031,6 +1038,9 @@
 
             // Display video status and notes
             updateVideoStatus(group);
+
+            attachLazyLoadListener(rearVideo);
+            attachLazyLoadListener(frontVideo);
         }
 
         function updateVideoStatus(group) {
