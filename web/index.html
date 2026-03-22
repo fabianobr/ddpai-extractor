@@ -989,6 +989,20 @@
             }
         }
 
+        function attachLazyLoadListener(videoElement) {
+            // Load video on first play attempt
+            const handlePlayAttempt = () => {
+                if (!videoElement.src && videoElement.dataset.lazySrc) {
+                    videoElement.src = videoElement.dataset.lazySrc;
+                    console.log('📹 Lazy loading video:', videoElement.dataset.lazySrc);
+                }
+                // Remove listener after first use (no need to re-load)
+                videoElement.removeEventListener('play', handlePlayAttempt);
+            };
+
+            videoElement.addEventListener('play', handlePlayAttempt);
+        }
+
         function updateVideos(group, idx) {
             const rearVideo = document.getElementById('video-rear');
             const frontVideo = document.getElementById('video-front');
@@ -1039,6 +1053,10 @@
 
             // Display video status and notes
             updateVideoStatus(group);
+
+            // Attach lazy load listeners
+            attachLazyLoadListener(rearVideo);
+            attachLazyLoadListener(frontVideo);
         }
 
         function updateVideoStatus(group) {
