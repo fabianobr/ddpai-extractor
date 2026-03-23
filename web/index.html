@@ -684,9 +684,9 @@
 
                 // If linked mode, sync the other video
                 if (syncState.mode === 'linked') {
-                    if (videoType === 'rear' && frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) {
+                    if (videoType === 'rear' && frontVideo && (frontVideo.dataset.lazySrc)) {
                         frontVideo.currentTime = seekTime;
-                    } else if (videoType === 'front' && rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
+                    } else if (videoType === 'front' && rearVideo && (rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
                     }
                 }
@@ -706,16 +706,14 @@
 
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
-                rearVideo.addEventListener('loadstart', () => { document.getElementById('rear-loading').style.display = 'block'; });
-                rearVideo.addEventListener('canplay', () => { document.getElementById('rear-loading').style.display = 'none'; console.log('✅ Rear ready'); });
+                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; console.log('✅ Rear playing'); });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
                 rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
             }
 
             if (frontVideo) {
-                frontVideo.addEventListener('loadstart', () => { document.getElementById('front-loading').style.display = 'block'; });
-                frontVideo.addEventListener('canplay', () => { document.getElementById('front-loading').style.display = 'none'; console.log('✅ Front ready'); });
+                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; console.log('✅ Front playing'); });
                 // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
@@ -894,15 +892,15 @@
                 const frontVideo = document.getElementById('video-front');
 
                 if (syncState.mode === 'linked') {
-                    if (rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) rearVideo.currentTime = seekTime;
-                    if (frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) frontVideo.currentTime = seekTime;
+                    if (rearVideo && (rearVideo.dataset.lazySrc)) rearVideo.currentTime = seekTime;
+                    if (frontVideo && (frontVideo.dataset.lazySrc)) frontVideo.currentTime = seekTime;
                 } else {
                     // Independent mode: only seek the active video
-                    if (syncState.activeVideo === 'rear' && rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
+                    if (syncState.activeVideo === 'rear' && rearVideo && (rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
-                    } else if (syncState.activeVideo === 'front' && frontVideo && (frontVideo.src || frontVideo.dataset.lazySrc)) {
+                    } else if (syncState.activeVideo === 'front' && frontVideo && (frontVideo.dataset.lazySrc)) {
                         frontVideo.currentTime = seekTime;
-                    } else if (rearVideo && (rearVideo.src || rearVideo.dataset.lazySrc)) {
+                    } else if (rearVideo && (rearVideo.dataset.lazySrc)) {
                         rearVideo.currentTime = seekTime;
                     }
                 }
@@ -990,13 +988,17 @@
         }
 
         function attachLazyLoadListener(videoElement) {
+            // Derive loading indicator element from video id (video-rear → rear-loading)
+            const loadingId = videoElement.id.replace('video-', '') + '-loading';
+            const loadingEl = document.getElementById(loadingId);
+
             // Load video on first play attempt
             const handlePlayAttempt = () => {
-                if (!videoElement.src && videoElement.dataset.lazySrc) {
+                if (videoElement.dataset.lazySrc && !videoElement.hasAttribute('src')) {
+                    if (loadingEl) loadingEl.style.display = 'block'; // Show immediately on click
                     videoElement.src = videoElement.dataset.lazySrc;
                     console.log('📹 Lazy loading video:', videoElement.dataset.lazySrc);
                 }
-                // Remove listener after first use (no need to re-load)
                 videoElement.removeEventListener('play', handlePlayAttempt);
             };
 
@@ -1013,9 +1015,11 @@
 
             const badge = `${Math.round(group.duration_min)} MIN`;
 
-            // Silent cancellation: clear any previous video loads
-            rearVideo.src = '';
-            frontVideo.src = '';
+            // Silent cancellation: remove src attribute entirely (src='' triggers errors)
+            rearVideo.removeAttribute('src');
+            rearVideo.load();
+            frontVideo.removeAttribute('src');
+            frontVideo.load();
             rearVideo.dataset.lazySrc = '';
             frontVideo.dataset.lazySrc = '';
 
@@ -1029,7 +1033,7 @@
                 rearContainer.style.display = 'block';
                 rearTitle.classList.remove('video-unavailable');
             } else {
-                rearVideo.src = '';
+                rearVideo.removeAttribute('src');
                 rearContainer.innerHTML = '<div class="video-not-available">📹 Rear video not available</div>';
                 rearTitle.classList.add('video-unavailable');
                 document.getElementById('rear-badge').textContent = 'N/A';
@@ -1045,7 +1049,7 @@
                 frontContainer.style.display = 'block';
                 frontTitle.classList.remove('video-unavailable');
             } else {
-                frontVideo.src = '';
+                frontVideo.removeAttribute('src');
                 frontContainer.innerHTML = '<div class="video-not-available">📹 Front video not available</div>';
                 frontTitle.classList.add('video-unavailable');
                 document.getElementById('front-badge').textContent = 'N/A';
