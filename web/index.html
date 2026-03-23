@@ -717,6 +717,7 @@
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
                 rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; console.log('✅ Rear playing'); });
+                rearVideo.addEventListener('pause', () => { document.getElementById('rear-play-btn').style.display = 'flex'; });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
                 rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
@@ -724,6 +725,7 @@
 
             if (frontVideo) {
                 frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; console.log('✅ Front playing'); });
+                frontVideo.addEventListener('pause', () => { document.getElementById('front-play-btn').style.display = 'flex'; });
                 // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
@@ -998,14 +1000,16 @@
         }
 
         function attachLazyLoadListener(videoElement) {
-            // Derive loading indicator element from video id (video-rear → rear-loading)
-            const loadingId = videoElement.id.replace('video-', '') + '-loading';
-            const loadingEl = document.getElementById(loadingId);
+            // Derive loading indicator and play button elements from video id
+            const suffix = videoElement.id.replace('video-', '');
+            const loadingEl = document.getElementById(suffix + '-loading');
+            const playBtnEl = document.getElementById(suffix + '-play-btn');
 
             // Load video on first play attempt
             const handlePlayAttempt = () => {
                 if (videoElement.dataset.lazySrc && !videoElement.hasAttribute('src')) {
-                    if (loadingEl) loadingEl.style.display = 'block'; // Show immediately on click
+                    if (playBtnEl) playBtnEl.style.display = 'none';  // Hide overlay while loading
+                    if (loadingEl) loadingEl.style.display = 'block';
                     videoElement.src = videoElement.dataset.lazySrc;
                     console.log('📹 Lazy loading video:', videoElement.dataset.lazySrc);
                 }
@@ -1032,6 +1036,16 @@
             frontVideo.load();
             rearVideo.dataset.lazySrc = '';
             frontVideo.dataset.lazySrc = '';
+
+            // Reset play button and loading indicator for the new trip
+            const rearPlayBtn = document.getElementById('rear-play-btn');
+            const frontPlayBtn = document.getElementById('front-play-btn');
+            const rearLoadingEl = document.getElementById('rear-loading');
+            const frontLoadingEl = document.getElementById('front-loading');
+            if (rearPlayBtn) rearPlayBtn.style.display = 'flex';
+            if (frontPlayBtn) frontPlayBtn.style.display = 'flex';
+            if (rearLoadingEl) rearLoadingEl.style.display = 'none';
+            if (frontLoadingEl) frontLoadingEl.style.display = 'none';
 
             // Handle rear video
             if (group.video_rear) {
