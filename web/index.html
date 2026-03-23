@@ -556,7 +556,10 @@
                                 <video id="video-rear" controls width="100%">
                                     Your browser doesn't support HTML5 video.
                                 </video>
-                                <div id="rear-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 10;">
+                                <div id="rear-play-btn" onclick="document.getElementById('video-rear').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
+                                </div>
+                                <div id="rear-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
                                     ⏳ Loading video...
                                 </div>
                                 <div class="video-path">📂 <span id="rear-path">-</span></div>
@@ -569,7 +572,10 @@
                                 <video id="video-front" controls width="100%">
                                     Your browser doesn't support HTML5 video.
                                 </video>
-                                <div id="front-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 10;">
+                                <div id="front-play-btn" onclick="document.getElementById('video-front').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
+                                </div>
+                                <div id="front-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
                                     ⏳ Loading video...
                                 </div>
                                 <div class="video-path">📂 <span id="front-path">-</span></div>
@@ -706,14 +712,14 @@
 
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
-                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; console.log('✅ Rear playing'); });
+                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; console.log('✅ Rear playing'); });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
                 rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
             }
 
             if (frontVideo) {
-                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; console.log('✅ Front playing'); });
+                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; console.log('✅ Front playing'); });
                 // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
