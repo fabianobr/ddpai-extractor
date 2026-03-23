@@ -142,3 +142,42 @@ def test_sync_conditions_use_lazy_src_not_dot_src(html_content):
         "Sync condition should use only dataset.lazySrc, not video.src"
     assert 'frontVideo.src || frontVideo.dataset.lazySrc' not in html_content, \
         "Sync condition should use only dataset.lazySrc, not video.src"
+
+
+# ── cloneNode / listener survival ────────────────────────────────────────────
+
+def test_lazy_listener_called_inside_sync_function(html_content):
+    """attachLazyLoadListener must be called inside attachVideoSyncListeners.
+
+    cloneNode(true) destroys event listeners. If attachLazyLoadListener is called
+    BEFORE the clone (e.g. in updateVideos), the play listener is lost when the
+    element is replaced by its clone — videos will never load on play click.
+    """
+    start = html_content.find('function attachVideoSyncListeners(')
+    assert start != -1, "attachVideoSyncListeners function must exist"
+    next_func = html_content.find('\n        function ', start + 10)
+    func_body = html_content[start:next_func if next_func != -1 else len(html_content)]
+
+    assert 'attachLazyLoadListener' in func_body, \
+        "attachLazyLoadListener must be called inside attachVideoSyncListeners " \
+        "(cloneNode destroys listeners added before clone)"
+
+
+def test_lazy_listener_called_after_clone_node(html_content):
+    """attachLazyLoadListener must appear AFTER cloneNode in attachVideoSyncListeners.
+
+    If called before, cloneNode replaces the element and silently destroys the play
+    listener — user clicks play but src is never set and video never loads.
+    """
+    start = html_content.find('function attachVideoSyncListeners(')
+    next_func = html_content.find('\n        function ', start + 10)
+    func_body = html_content[start:next_func if next_func != -1 else len(html_content)]
+
+    clone_pos = func_body.find('cloneNode')
+    lazy_pos = func_body.find('attachLazyLoadListener')
+
+    assert clone_pos != -1, "attachVideoSyncListeners must contain cloneNode"
+    assert lazy_pos != -1, "attachLazyLoadListener must be called inside attachVideoSyncListeners"
+    assert lazy_pos > clone_pos, \
+        "attachLazyLoadListener must be called AFTER cloneNode — calling before means " \
+        "the clone replaces the element and the play listener is silently destroyed"

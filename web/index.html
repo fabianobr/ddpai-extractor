@@ -710,6 +710,10 @@
                 frontVideo = newFrontVideo;
             }
 
+            // Attach lazy load listeners to the cloned elements (cloneNode strips event listeners)
+            attachLazyLoadListener(rearVideo);
+            attachLazyLoadListener(frontVideo);
+
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
                 rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; console.log('✅ Rear playing'); });
@@ -1064,9 +1068,6 @@
             // Display video status and notes
             updateVideoStatus(group);
 
-            // Attach lazy load listeners
-            attachLazyLoadListener(rearVideo);
-            attachLazyLoadListener(frontVideo);
         }
 
         function updateVideoStatus(group) {
