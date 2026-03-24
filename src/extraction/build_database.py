@@ -1347,9 +1347,11 @@ def main():
 
         label = f"{start_date.strftime('%b %d')} {start_date.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
 
-        # Prepare points for database (simplified format)
+        # Prepare points for database: [lat, lon, speed_kmh, altitude, heading, time_offset_s]
+        trip_start = all_points[0]['timestamp'] if all_points else None
         points_for_db = [
-            [p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']]
+            [p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading'],
+             round((p['timestamp'] - trip_start).total_seconds(), 2) if trip_start else 0.0]
             for p in all_points
         ]
 
