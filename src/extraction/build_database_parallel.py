@@ -259,6 +259,9 @@ def process_group(group_idx, group, total_groups, inner_executor):
     if all_points and all_points[0].get('timestamp'):
         start_timestamp = all_points[0]['timestamp'].isoformat()
 
+    # time_offset_s: seconds since first GPS point of the trip
+    _trip_start = all_points[0]['timestamp'] if all_points else None
+
     return {
         'id': group_id,
         'label': label,
@@ -267,7 +270,9 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'distance_km': stats['distance_km'],
         'max_speed': stats['max_speed'],
         'avg_speed': stats['avg_speed'],
-        'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']] for p in all_points],
+        'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading'],
+                    round((p['timestamp'] - _trip_start).total_seconds(), 2) if _trip_start else 0.0]
+                   for p in all_points],
         'video_rear': video_rear_path,
         'video_front': video_front_path,
         'video_status': video_status,
