@@ -665,9 +665,20 @@
                     return;
                 }
 
-                // Linear interpolation: map video time to GPS index
-                const gpsIndex = Math.floor((currentTime / gps_duration_s) * points.length);
-                const clampedIndex = Math.max(0, Math.min(gpsIndex, points.length - 1));
+                // Binary search on time_offset_s (points[i][5]); fallback to linear if old trips.json
+                let clampedIndex;
+                if (points.length && points[0].length >= 6) {
+                    let lo = 0, hi = points.length - 1;
+                    while (lo < hi) {
+                        const mid = (lo + hi + 1) >> 1;
+                        if (points[mid][5] <= currentTime) lo = mid;
+                        else hi = mid - 1;
+                    }
+                    clampedIndex = lo;
+                } else {
+                    const gpsIndex = Math.floor((currentTime / gps_duration_s) * points.length);
+                    clampedIndex = Math.max(0, Math.min(gpsIndex, points.length - 1));
+                }
 
                 updateMapMarker(clampedIndex);
                 showVideoTimeIndicator(currentTime, gps_duration_s);
@@ -897,7 +908,10 @@
 
                 // Calculate seek time
                 const gps_duration_s = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
-                const seekTime = (closestIndex / points.length) * gps_duration_s;
+                // Use time_offset_s directly from closest point; fallback to linear for old trips.json
+                const seekTime = (points[closestIndex] && points[closestIndex].length >= 6)
+                    ? points[closestIndex][5]
+                    : (closestIndex / points.length) * gps_duration_s;
 
                 // Seek video(s)
                 const rearVideo = document.getElementById('video-rear');
