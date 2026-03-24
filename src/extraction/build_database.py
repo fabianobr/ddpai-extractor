@@ -418,7 +418,7 @@ def merge_gps_points(rmc_points, gga_points, tar_date=None):
             'timestamp': timestamp if timestamp else datetime.now()
         })
 
-    return sorted(points, key=lambda p: (p['lat'], p['lon']))
+    return sorted(points, key=lambda p: p['timestamp'])
 
 def extract_gps_from_tar(tar_path):
     """Extract all GPS points from tar file."""
