@@ -58,6 +58,89 @@ IDLE_SPEED_THRESHOLD = 0.5          # km/h — speed at or below this is conside
 IDLE_DURATION_THRESHOLD = 5 * 60    # 300 seconds (5 minutes minimum)
 
 # ============================================================================
+# Video Duration Extraction
+# ============================================================================
+
+def extract_video_duration(video_path):
+    """
+    Extract actual video duration using ffprobe.
+
+    Args:
+        video_path: Path to video file
+
+    Returns:
+        float: Duration in seconds, or None if extraction fails
+    """
+    if not os.path.exists(video_path):
+        return None
+
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            video_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+        return None
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
+
+
+def validate_video_gps_duration(video_duration_s, gps_duration_s):
+    """
+    Validate video duration against GPS duration.
+
+    Args:
+        video_duration_s: Video duration in seconds (or None if unavailable)
+        gps_duration_s: GPS data duration in seconds
+
+    Returns:
+        str: "match" | "video_shorter" | "video_longer" | "no_video"
+    """
+    if video_duration_s is None:
+        return "no_video"
+
+    diff_s = abs(video_duration_s - gps_duration_s)
+
+    if diff_s <= 5:
+        return "match"
+    elif video_duration_s < gps_duration_s:
+        return "video_shorter"
+    else:
+        return "video_longer"
+
+
+def compute_sparse_timestamps(points, sample_interval=10):
+    """
+    Compute sparse timestamps at every Nth GPS point.
+
+    Args:
+        points: List of GPS points with 'timestamp' field
+        sample_interval: Sample every Nth point (default: 10)
+
+    Returns:
+        List of dicts: [{"index": 0, "timestamp": "2026-03-14T13:13:46Z"}, ...]
+    """
+    if not points:
+        return []
+
+    sparse = []
+    for i in range(0, len(points), sample_interval):
+        if i < len(points):
+            timestamp = points[i].get('timestamp')
+            if isinstance(timestamp, datetime):
+                sparse.append({
+                    'index': i,
+                    'timestamp': timestamp.isoformat()
+                })
+
+    return sparse
+
+# ============================================================================
 # NMEA Parsing (reused from ddpai_route_improved.py)
 # ============================================================================
 
@@ -335,7 +418,7 @@ def merge_gps_points(rmc_points, gga_points, tar_date=None):
             'timestamp': timestamp if timestamp else datetime.now()
         })
 
-    return sorted(points, key=lambda p: (p['lat'], p['lon']))
+    return sorted(points, key=lambda p: p['timestamp'])
 
 def extract_gps_from_tar(tar_path):
     """Extract all GPS points from tar file."""
@@ -1264,9 +1347,11 @@ def main():
 
         label = f"{start_date.strftime('%b %d')} {start_date.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
 
-        # Prepare points for database (simplified format)
+        # Prepare points for database: [lat, lon, speed_kmh, altitude, heading, time_offset_s]
+        trip_start = all_points[0]['timestamp'] if all_points else None
         points_for_db = [
-            [p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']]
+            [p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading'],
+             round((p['timestamp'] - trip_start).total_seconds(), 2) if trip_start else 0.0]
             for p in all_points
         ]
 
@@ -1287,6 +1372,43 @@ def main():
                 'distance_km': seg['distance_km'],
             })
 
+        # Video duration extraction and validation
+        video_duration_rear_s = None
+        video_duration_front_s = None
+        video_duration_status = "no_video"
+
+        if video_rear_path and os.path.exists(video_rear_path):
+            video_duration_rear_s = extract_video_duration(video_rear_path)
+
+        if video_front_path and os.path.exists(video_front_path):
+            video_duration_front_s = extract_video_duration(video_front_path)
+
+        # Use rear video duration for validation (both should match)
+        if video_duration_rear_s is not None:
+            # Calculate GPS duration from timestamps
+            if all_points and all_points[0].get('timestamp') and all_points[-1].get('timestamp'):
+                gps_duration_s = (all_points[-1]['timestamp'] - all_points[0]['timestamp']).total_seconds()
+            else:
+                gps_duration_s = stats['duration_min'] * 60
+
+            video_duration_status = validate_video_gps_duration(video_duration_rear_s, gps_duration_s)
+
+            if video_duration_status == "match":
+                print(f"  ✅ Duration match: video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s")
+            elif video_duration_status == "video_shorter":
+                gap_s = gps_duration_s - video_duration_rear_s
+                print(f"  ⚠️  Video shorter by {gap_s:.1f}s (video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s)")
+            elif video_duration_status == "video_longer":
+                print(f"  ⚠️  Video longer than GPS (possible encoding issue)")
+
+        # Compute sparse timestamps
+        sparse_timestamps = compute_sparse_timestamps(all_points, sample_interval=10)
+
+        # Get start timestamp
+        start_timestamp = None
+        if all_points and all_points[0].get('timestamp'):
+            start_timestamp = all_points[0]['timestamp'].isoformat()
+
         # Add to groups data
         groups_data.append({
             'id': group_id,
@@ -1301,7 +1423,13 @@ def main():
             'video_front': video_front_path,
             'video_status': video_status,
             'video_notes': video_notes,
-            'idle_segments': idle_segments_json
+            'idle_segments': idle_segments_json,
+            # NEW SYNC FIELDS
+            'video_duration_s': video_duration_rear_s,
+            'start_timestamp': start_timestamp,
+            'gps_points_count': len(all_points),
+            'video_duration_status': video_duration_status,
+            'sparse_timestamps': sparse_timestamps
         })
 
         valid_count += 1

@@ -18,6 +18,7 @@ from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
     detect_idle_segments, discover_videos, validate_gps, validate_videos,
     compute_trip_stats, merge_videos, save_merge_report, is_parking_file,
+    extract_video_duration, validate_video_gps_duration, compute_sparse_timestamps,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
     OUTPUT_HEIGHT, VIDEO_CRF, VIDEO_PRESET
@@ -221,6 +222,46 @@ def process_group(group_idx, group, total_groups, inner_executor):
             'distance_km': seg['distance_km'],
         })
 
+    # Video duration extraction and validation
+    video_duration_rear_s = None
+    video_duration_front_s = None
+    video_duration_status = "no_video"
+
+    if video_rear_path and os.path.exists(video_rear_path):
+        video_duration_rear_s = extract_video_duration(video_rear_path)
+
+    if video_front_path and os.path.exists(video_front_path):
+        video_duration_front_s = extract_video_duration(video_front_path)
+
+    # Use rear video duration for validation (both should match)
+    if video_duration_rear_s is not None:
+        # Calculate GPS duration from timestamps
+        if all_points and all_points[0].get('timestamp') and all_points[-1].get('timestamp'):
+            gps_duration_s = (all_points[-1]['timestamp'] - all_points[0]['timestamp']).total_seconds()
+        else:
+            gps_duration_s = stats['duration_min'] * 60
+
+        video_duration_status = validate_video_gps_duration(video_duration_rear_s, gps_duration_s)
+
+        if video_duration_status == "match":
+            locked_print(f"  [{group_id}] ✅ Duration match: video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s")
+        elif video_duration_status == "video_shorter":
+            gap_s = gps_duration_s - video_duration_rear_s
+            locked_print(f"  [{group_id}] ⚠️  Video shorter by {gap_s:.1f}s (video {video_duration_rear_s:.1f}s vs GPS {gps_duration_s:.1f}s)")
+        elif video_duration_status == "video_longer":
+            locked_print(f"  [{group_id}] ⚠️  Video longer than GPS (possible encoding issue)")
+
+    # Compute sparse timestamps
+    sparse_timestamps = compute_sparse_timestamps(all_points, sample_interval=10)
+
+    # Get start timestamp
+    start_timestamp = None
+    if all_points and all_points[0].get('timestamp'):
+        start_timestamp = all_points[0]['timestamp'].isoformat()
+
+    # time_offset_s: seconds since first GPS point of the trip
+    _trip_start = all_points[0]['timestamp'] if all_points else None
+
     return {
         'id': group_id,
         'label': label,
@@ -229,12 +270,20 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'distance_km': stats['distance_km'],
         'max_speed': stats['max_speed'],
         'avg_speed': stats['avg_speed'],
-        'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading']] for p in all_points],
+        'points': [[p['lat'], p['lon'], p['speed_kmh'], p['altitude'], p['heading'],
+                    round((p['timestamp'] - _trip_start).total_seconds(), 2) if _trip_start else 0.0]
+                   for p in all_points],
         'video_rear': video_rear_path,
         'video_front': video_front_path,
         'video_status': video_status,
         'video_notes': video_notes,
-        'idle_segments': idle_segments_json
+        'idle_segments': idle_segments_json,
+        # NEW SYNC FIELDS
+        'video_duration_s': video_duration_rear_s,
+        'start_timestamp': start_timestamp,
+        'gps_points_count': len(all_points),
+        'video_duration_status': video_duration_status,
+        'sparse_timestamps': sparse_timestamps
     }, group_merge_info
 
 # ============================================================================

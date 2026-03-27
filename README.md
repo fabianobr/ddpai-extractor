@@ -83,6 +83,42 @@ JSON database (GPS points, stats, video paths)
 Browser: Leaflet map, Chart.js graphs, video players
 ```
 
+## Video-GPS Synchronization
+
+### Features
+- **Bidirectional sync:** Play/scrub video → map updates | Click map → video seeks
+- **Switchable modes:** Linked (both videos together) or Independent (each syncs separately)
+- **Gap handling:** Gracefully handles when video is shorter/longer than GPS data
+- **Real-time visualization:** See playback position on map with time indicator
+
+### Usage
+1. Open dashboard: `./run.sh` → http://localhost:8000/web/
+2. Select a trip with video
+3. Use sync mode buttons: "🔗 Linked" or "🎬 Independent"
+4. Play video to see map follow playback
+5. Click map to jump video to that GPS point
+
+### Video Duration Validation
+During build, the system:
+- Extracts actual video duration using ffprobe
+- Compares with GPS duration
+- Logs mismatches (video shorter/longer than GPS)
+- Trusts GPS data as source of truth
+
+If `video_duration_status = "video_shorter"`:
+- Yellow badge appears showing when video ended
+- Map remains clickable for GPS points beyond video end
+- Video freezes at last frame
+
+### Architecture
+- **Backend:** ffprobe extracts duration, build process validates and adds to JSON
+- **Frontend:** Event listeners sync video ↔ map; linear interpolation maps time to GPS index
+- **Data:** JSON schema includes `video_duration_s`, `start_timestamp`, `sparse_timestamps`
+
+### Testing
+- Unit tests: `pytest tests/test_video_sync_build.py`
+- Manual testing: Follow guide in `tests/test_video_sync_frontend_manual.md`
+
 ## Data Structure
 
 **Input:** TAR archives containing GPX NMEA sentence logs

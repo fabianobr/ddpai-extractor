@@ -81,6 +81,13 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 - 🔴 **MUST** create feature branches (never commit to main/develop directly)
 - 🔴 **MUST** use Conventional Commits for clear history
 
+## Documentation Standards
+
+**Diagrams & Visualizations:**
+- 🔴 **MUST** use Mermaid for all diagrams (flowcharts, architecture, data flow, etc.)
+- Save Mermaid code in design specs and commit to `docs/superpowers/specs/`
+- Renders automatically on GitHub (no external tools needed)
+
 ## Architecture & Workflow
 
 ```
@@ -199,6 +206,26 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - Backs up `data/trips.json` before each rebuild
 - Sends macOS Notification Center alerts on build complete/failure
 - State file `data/.last_tar_count` tracks TAR file count (gitignored)
+
+**Synchronize video playback with map position**
+```bash
+# Open web/index.html in browser
+./run.sh
+# Then: http://localhost:8000/web/
+# - Select trip with video
+# - Play video: map marker follows playback
+# - Click map: video seeks to that GPS point
+# - Toggle "🔗 Linked" / "🎬 Independent" for rear/front sync modes
+```
+
+**Sync modes:**
+- **Linked (default):** Both rear and front videos stay synchronized
+- **Independent:** Each video syncs to map independently
+
+**Video gap handling:**
+- If video is shorter than GPS data, yellow badge shows "⚠️ Video ended at X:XX"
+- Map remains interactive beyond video end; video freezes at last frame
+- Trust GPS data as source of truth for timeline
 
 **Change trip grouping threshold** (src/extraction/build_database.py)
 - Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
