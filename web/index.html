@@ -564,6 +564,7 @@
                                 </div>
                                 <div class="video-path">📂 <span id="rear-path">-</span></div>
                             </div>
+                            <div id="rear-unavailable" class="video-not-available" style="display:none">📹 Rear video not available</div>
                         </div>
 
                         <div class="video-card">
@@ -580,6 +581,7 @@
                                 </div>
                                 <div class="video-path">📂 <span id="front-path">-</span></div>
                             </div>
+                            <div id="front-unavailable" class="video-not-available" style="display:none">📹 Front video not available</div>
                         </div>
                     </div>
                 </div>
@@ -1014,6 +1016,7 @@
         }
 
         function attachLazyLoadListener(videoElement) {
+            if (!videoElement) return;
             // Derive loading indicator and play button elements from video id
             const suffix = videoElement.id.replace('video-', '');
             const loadingEl = document.getElementById(suffix + '-loading');
@@ -1069,10 +1072,12 @@
                 document.getElementById('rear-path').textContent = group.video_rear;
                 document.getElementById('rear-badge').textContent = badge;
                 rearContainer.style.display = 'block';
+                document.getElementById('rear-unavailable').style.display = 'none';
                 rearTitle.classList.remove('video-unavailable');
             } else {
                 rearVideo.removeAttribute('src');
-                rearContainer.innerHTML = '<div class="video-not-available">📹 Rear video not available</div>';
+                rearContainer.style.display = 'none';
+                document.getElementById('rear-unavailable').style.display = 'block';
                 rearTitle.classList.add('video-unavailable');
                 document.getElementById('rear-badge').textContent = 'N/A';
             }
@@ -1085,10 +1090,12 @@
                 document.getElementById('front-path').textContent = group.video_front;
                 document.getElementById('front-badge').textContent = badge;
                 frontContainer.style.display = 'block';
+                document.getElementById('front-unavailable').style.display = 'none';
                 frontTitle.classList.remove('video-unavailable');
             } else {
                 frontVideo.removeAttribute('src');
-                frontContainer.innerHTML = '<div class="video-not-available">📹 Front video not available</div>';
+                frontContainer.style.display = 'none';
+                document.getElementById('front-unavailable').style.display = 'block';
                 frontTitle.classList.add('video-unavailable');
                 document.getElementById('front-badge').textContent = 'N/A';
             }
@@ -1101,6 +1108,7 @@
         function updateVideoStatus(group) {
             const statusEl = document.getElementById('statusText');
             const notesEl = document.getElementById('notesText');
+            if (!statusEl || !notesEl) return;
             const status = group.video_status || 'unknown';
             const notes = group.video_notes || 'No additional information';
 
@@ -1122,6 +1130,7 @@
 
         function updateTripDetails(group) {
             const detailsDiv = document.getElementById('trip-details');
+            if (!detailsDiv) return;
             let html = '<h3>Trip Details</h3>';
 
             // Basic trip statistics
