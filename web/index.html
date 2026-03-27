@@ -729,16 +729,18 @@
 
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
-                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; console.log('✅ Rear playing'); });
+                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; syncState.activeVideo = 'rear'; });
                 rearVideo.addEventListener('pause', () => { document.getElementById('rear-play-btn').style.display = 'flex'; });
+                rearVideo.addEventListener('click', () => { syncState.activeVideo = 'rear'; });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
                 rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
                 rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
             }
 
             if (frontVideo) {
-                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; console.log('✅ Front playing'); });
+                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; syncState.activeVideo = 'front'; });
                 frontVideo.addEventListener('pause', () => { document.getElementById('front-play-btn').style.display = 'flex'; });
+                frontVideo.addEventListener('click', () => { syncState.activeVideo = 'front'; });
                 // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
                 frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
@@ -753,7 +755,7 @@
             }
 
             const point = currentGroup.points[gpsIndex];
-            const [lat, lon, speed, altitude, distance] = point;
+            const [lat, lon, speed, altitude, heading] = point;
 
             // Remove old marker if exists
             if (window.currentMarker) {
@@ -771,7 +773,7 @@
                 <b>Current Position</b><br/>
                 Speed: ${speed.toFixed(1)} km/h<br/>
                 Altitude: ${altitude.toFixed(1)} m<br/>
-                Distance: ${distance.toFixed(2)} km
+                Heading: ${heading != null ? heading.toFixed(1) + '°' : 'N/A'}
             `);
 
             // Pan map to marker
