@@ -564,6 +564,7 @@
                                 </div>
                                 <div class="video-path">📂 <span id="rear-path">-</span></div>
                             </div>
+                            <div id="rear-unavailable" class="video-not-available" style="display:none">📹 Rear video not available</div>
                         </div>
 
                         <div class="video-card">
@@ -580,6 +581,7 @@
                                 </div>
                                 <div class="video-path">📂 <span id="front-path">-</span></div>
                             </div>
+                            <div id="front-unavailable" class="video-not-available" style="display:none">📹 Front video not available</div>
                         </div>
                     </div>
                 </div>
@@ -722,8 +724,8 @@
             }
 
             // Attach lazy load listeners to the cloned elements (cloneNode strips event listeners)
-            attachLazyLoadListener(rearVideo);
-            attachLazyLoadListener(frontVideo);
+            if (rearVideo) attachLazyLoadListener(rearVideo);
+            if (frontVideo) attachLazyLoadListener(frontVideo);
 
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
@@ -1069,10 +1071,12 @@
                 document.getElementById('rear-path').textContent = group.video_rear;
                 document.getElementById('rear-badge').textContent = badge;
                 rearContainer.style.display = 'block';
+                document.getElementById('rear-unavailable').style.display = 'none';
                 rearTitle.classList.remove('video-unavailable');
             } else {
-                rearVideo.removeAttribute('src');
-                rearContainer.innerHTML = '<div class="video-not-available">📹 Rear video not available</div>';
+                rearVideo.dataset.lazySrc = '';
+                rearContainer.style.display = 'none';
+                document.getElementById('rear-unavailable').style.display = 'block';
                 rearTitle.classList.add('video-unavailable');
                 document.getElementById('rear-badge').textContent = 'N/A';
             }
@@ -1085,10 +1089,12 @@
                 document.getElementById('front-path').textContent = group.video_front;
                 document.getElementById('front-badge').textContent = badge;
                 frontContainer.style.display = 'block';
+                document.getElementById('front-unavailable').style.display = 'none';
                 frontTitle.classList.remove('video-unavailable');
             } else {
-                frontVideo.removeAttribute('src');
-                frontContainer.innerHTML = '<div class="video-not-available">📹 Front video not available</div>';
+                frontVideo.dataset.lazySrc = '';
+                frontContainer.style.display = 'none';
+                document.getElementById('front-unavailable').style.display = 'block';
                 frontTitle.classList.add('video-unavailable');
                 document.getElementById('front-badge').textContent = 'N/A';
             }
