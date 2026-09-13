@@ -358,6 +358,31 @@
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         }
 
+        #map-coordinate-control {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            font-size: 12px;
+            color: #2c3e50;
+        }
+
+        #map-coordinate-value {
+            display: block;
+            margin: 4px 0 8px;
+            font-family: monospace;
+            font-weight: 600;
+        }
+
+        #copy-map-coordinate {
+            border: 0;
+            border-radius: 3px;
+            padding: 5px 8px;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+        }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
@@ -387,7 +412,7 @@
         let speedChart = null;
         let altitudeChart = null;
         let currentMap = null;
-        let currentPolyline = null;
+        let currentRouteLayer = null;
         let currentGroup = null;
         let currentPlayheadIndex = 0;  // Track playhead position for charts
 
@@ -821,6 +846,86 @@
             }
         }
 
+        function initializeMapCoordinateControl() {
+            if (window.mapCoordinateControl) return;
+
+            window.mapCoordinateControl = L.control({position: 'bottomleft'});
+            window.mapCoordinateControl.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control map-coordinate-control');
+                div.id = 'map-coordinate-control';
+                div.innerHTML = `
+                    <strong>Coordenada clicada</strong>
+                    <span id="map-coordinate-value">Clique no mapa</span>
+                    <button id="copy-map-coordinate" type="button" disabled>Copiar</button>
+                `;
+                L.DomEvent.disableClickPropagation(div);
+                L.DomEvent.disableScrollPropagation(div);
+                return div;
+            };
+            window.mapCoordinateControl.addTo(currentMap);
+
+            document.getElementById('copy-map-coordinate').addEventListener('click', copyMapCoordinate);
+        }
+
+        function setMapCoordinate(lat, lon) {
+            const coordinate = `${decimalToDms(lat, 'lat')}, ${decimalToDms(lon, 'lon')}`;
+            const value = document.getElementById('map-coordinate-value');
+            const button = document.getElementById('copy-map-coordinate');
+            if (value) value.textContent = coordinate;
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Copiar';
+                button.dataset.coordinate = coordinate;
+            }
+        }
+
+        function resetMapCoordinate() {
+            const value = document.getElementById('map-coordinate-value');
+            const button = document.getElementById('copy-map-coordinate');
+            if (value) value.textContent = 'Clique no mapa';
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Copiar';
+                delete button.dataset.coordinate;
+            }
+        }
+
+        function decimalToDms(value, axis) {
+            const absolute = Math.abs(value);
+            const degrees = Math.floor(absolute);
+            const minutesDecimal = (absolute - degrees) * 60;
+            const minutes = Math.floor(minutesDecimal);
+            const seconds = ((minutesDecimal - minutes) * 60).toFixed(2);
+            const hemisphere = axis === 'lat'
+                ? (value >= 0 ? 'N' : 'S')
+                : (value >= 0 ? 'E' : 'W');
+            return `${degrees}° ${minutes}' ${seconds}\" ${hemisphere}`;
+        }
+
+        async function copyMapCoordinate() {
+            const button = document.getElementById('copy-map-coordinate');
+            const coordinate = button && button.dataset.coordinate;
+            if (!coordinate) return;
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(coordinate);
+                } else {
+                    const input = document.createElement('textarea');
+                    input.value = coordinate;
+                    input.style.position = 'fixed';
+                    input.style.opacity = '0';
+                    document.body.appendChild(input);
+                    input.select();
+                    document.execCommand('copy');
+                    input.remove();
+                }
+                button.textContent = 'Copiado!';
+            } catch (error) {
+                button.textContent = 'Falhou — selecione o texto';
+            }
+        }
+
         function updateMap(points, idleSegments = []) {
             if (!currentMap) {
                 currentMap = L.map('map').setView([-27.5, -48.5], 11);
@@ -828,11 +933,21 @@
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 }).addTo(currentMap);
+                initializeMapCoordinateControl();
             }
 
-            // Remove old polyline
-            if (currentPolyline) {
-                currentMap.removeLayer(currentPolyline);
+            // Each selected trip owns one layer group. Clearing it prevents routes
+            // from previously selected sidebar items remaining on the map.
+            if (currentRouteLayer) {
+                currentRouteLayer.clearLayers();
+                currentMap.removeLayer(currentRouteLayer);
+            }
+            currentRouteLayer = L.layerGroup().addTo(currentMap);
+            resetMapCoordinate();
+
+            if (window.currentMarker) {
+                currentMap.removeLayer(window.currentMarker);
+                window.currentMarker = null;
             }
 
             // Create index set for idle ranges
@@ -861,7 +976,7 @@
                         weight: isIdle ? 2 : 3,
                         dashArray: isIdle ? '5,5' : null,
                         className: isIdle ? 'idle-segment' : 'active-segment'
-                    }).addTo(currentMap);
+                    }).addTo(currentRouteLayer);
 
                     currentSegment = [[point[0], point[1]]];
                     isIdle = pointIsIdle;
@@ -878,7 +993,7 @@
                     weight: isIdle ? 2 : 3,
                     dashArray: isIdle ? '5,5' : null,
                     className: isIdle ? 'idle-segment' : 'active-segment'
-                }).addTo(currentMap);
+                }).addTo(currentRouteLayer);
             }
 
             // Fit bounds to all points
@@ -890,6 +1005,8 @@
             currentMap.off('click');
             currentMap.on('click', function(e) {
                 if (syncState.isSyncing) return;
+
+                setMapCoordinate(e.latlng.lat, e.latlng.lng);
 
                 syncState.isSyncing = true;
                 syncState.lastUpdateSource = 'map';
