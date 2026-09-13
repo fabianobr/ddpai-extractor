@@ -35,7 +35,7 @@ jobs:
         run: |
           test -f README.md && echo "✓ README.md exists"
           test -f LICENSE && echo "✓ LICENSE exists"
-          test -f CHANGELOG.md && echo "✓ CHANGELOG.md exists"
+          test -f docs/CHANGELOG.md && echo "✓ docs/CHANGELOG.md exists"
 
       - name: Validate JSON database schema (if exists)
         run: |
