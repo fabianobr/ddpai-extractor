@@ -10,7 +10,7 @@
 
 2. Open browser:
    ```
-   http://localhost:8000/web/
+   http://localhost:8765/web/
    ```
 
 ## Test Scenarios

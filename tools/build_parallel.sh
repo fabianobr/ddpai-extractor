@@ -4,8 +4,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 TAR_DIR="${1:-working_data/tar}"
-REAR_DIR="${2:-/Users/fabianosilva/dashcam/DCIM/200video/rear}"
-FRONT_DIR="${3:-/Users/fabianosilva/dashcam/DCIM/200video/front}"
+REAR_DIR="${2:-working_data/videos/rear}"
+FRONT_DIR="${3:-working_data/videos/front}"
 OUTPUT_DIR="${4:-.}"
 
 if [ ! -d "$TAR_DIR" ]; then
