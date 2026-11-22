@@ -10,7 +10,7 @@ navegador, `module.exports` no Node), testado em Node. `web/index.html` é reesc
 portados de `docs/ux/redesign-2026-11/opcao-c.html` e com o script inline reduzido a cola de DOM.
 `web/video-sync.js` não muda.
 
-**Tech Stack:** HTML/CSS/JS sem build; Leaflet 1.9.4 (cdnjs); tiles CARTO; Google Fonts; testes `unittest` do
+**Tech Stack:** HTML/CSS/JS sem build; Leaflet 1.9.4 (cdnjs); tiles OSM com filtro CSS por tema; Google Fonts; testes `unittest` do
 Python, que chamam Node 22 para o JS.
 
 **Spec:** `docs/superpowers/specs/2026-11-22-trip-detail-redesign-design.md` (base:
@@ -21,7 +21,7 @@ Python, que chamam Node 22 para o JS.
 
 - Página estática servida por `src.processing.http_server`, sem build; bibliotecas só via CDN com versão exata (Leaflet `1.9.4` do cdnjs). Chart.js sai.
 - Fontes: Google Fonts `Familjen Grotesk` (500/600/700) e `Atkinson Hyperlegible` (400/700), sempre com pilha de fallback do sistema.
-- Tiles CARTO `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png` e `…/dark_all/…`, atribuição `© OpenStreetMap © CARTO`, trocados conforme o tema.
+- Tiles OSM `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`, atribuição `© OpenStreetMap`, com filtro CSS `--tile-filter` por tema (revisado na execução: o CARTO passou a exigir chave de API).
 - `web/video-sync.js` intacto; `linkVideos` é chamado **uma única vez**, na inicialização, com `getGroup = () => currentTrip`.
 - Lazy loading: caminho em `dataset.lazySrc`; limpar com `removeAttribute('src')` + `.load()`; nunca `src = ''`; condição de carga `hasAttribute('src')`.
 - Toda a interface em pt-BR, sem jargão de build. Nada de `alert/confirm/prompt`.
@@ -546,7 +546,7 @@ detalhe e o `:root`) e as funções de `web/index.html` atual que serão portada
     - `attachLazyLoadListener(cameraVideo(c))` e `linkVideos(...)` são chamados **uma vez** em `init`.
     - `loadTripVideos(trip)` faz `removeAttribute('src')` + `.load()`, grava `dataset.lazySrc` e aplica o `playbackRate` atual.
   - **Mapa:**
-    - Leaflet com tiles CARTO pelo tema. A rota é desenhada em duas polylines (percorrida e restante), as paradas tracejadas e o veículo em `L.circleMarker` amarelo.
+    - Leaflet com tiles OSM e `--tile-filter` por tema. A rota é desenhada em duas polylines (percorrida e restante), as paradas tracejadas e o veículo em `L.circleMarker` amarelo.
     - `#map-follow` (aria-pressed), `#map-fit` e `#map-expand`. Ampliar alterna uma classe no layout e chama `invalidateSize` em seguida; a tecla M faz o mesmo.
     - Clique no mapa leva ao ponto mais próximo (lógica atual) via `seekToPoint`.
   - **Cadeado `#sync-lock`:** `updateSyncLock` reflete `syncState.mode` e grava `localStorage.syncMode`.

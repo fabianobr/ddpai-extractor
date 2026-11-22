@@ -73,7 +73,7 @@ flowchart LR
     end
     TM --> APP
     VS --> APP
-    APP --> L["Leaflet 1.9.4<br/>tiles CARTO claro/escuro"]
+    APP --> L["Leaflet 1.9.4<br/>tiles OSM + filtro CSS por tema"]
     APP --> V["&lt;video&gt; dianteiro e traseiro<br/>(lazy)"]
 ```
 
@@ -109,8 +109,8 @@ Hyperlegible, raios e componentes). O script inline vira só cola de DOM. Peças
   classe no contêiner (`pip` com a dianteira principal, `pip swapped`, `side`). Botões "Lado a lado" e
   "Trocar". A câmera principal é a `syncState.activeVideo`. Uma placa sobre o vídeo avisa quando a câmera
   não tem gravação no trecho (substitui `#camera-coverage`).
-- **Mapa (cartão):** Leaflet com tiles CARTO `light_all`/`dark_all` conforme o tema, atribuição
-  "© OpenStreetMap © CARTO". A rota percorrida fica forte e a restante clara; paradas tracejadas; marcador do
+- **Mapa (cartão):** Leaflet com tiles OpenStreetMap e um filtro CSS por tema (`--tile-filter`: dessaturado no claro, invertido no
+  escuro), atribuição "© OpenStreetMap". A rota percorrida fica forte e a restante clara; paradas tracejadas; marcador do
   veículo em amarelo; seleção em azul; botões seguir, enquadrar e ampliar. **Ampliar (M)** troca mapa e vídeo
   de lugar (classe no layout + `invalidateSize`), o que fecha o UC11. Clique no mapa leva ao ponto e mostra a
   barra de coordenada com "Copiar".
@@ -197,7 +197,8 @@ M (ampliar mapa), C (trocar câmera), Esc (fecha popovers). São ignorados quand
 
 ## 8. Decisões minhas (para o dono conferir)
 
-1. Tiles **CARTO** (claro/escuro, sem chave) no lugar dos tiles padrão do OSM, para combinar com os dois
+1. ~~Tiles CARTO~~ **Revisado na execução:** o CARTO passou a exigir chave de API ("API KEY REQUIRED"). Ficam os
+   tiles do OSM (os mesmos de hoje), com o visual de cada tema feito por filtro CSS. Texto original: tiles CARTO, para combinar com os dois
    temas. É gratuito para uso não comercial.
 2. **Chart.js removido:** velocidade e altitude viram faixas SVG alinhadas ao eixo de horário da linha do
    tempo (cumpre P2 e P10).
