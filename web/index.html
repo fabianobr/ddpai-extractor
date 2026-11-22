@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DDpai Dashboard - Multi-Trip Analysis</title>
+    <title>Estúdio de viagem DDPAI</title>
     <link rel="icon" type="image/x-icon" href="../favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -27,7 +27,7 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4a56c9 0%, #764ba2 100%);
             padding: 30px;
             border-radius: 8px;
             color: white;
@@ -92,7 +92,7 @@
         }
 
         .trip-item.active {
-            background: #667eea;
+            background: #4a56c9;
             color: white;
             border-left: 4px solid #764ba2;
         }
@@ -104,7 +104,11 @@
 
         .trip-meta {
             font-size: 12px;
-            opacity: 0.7;
+            color: #555;
+        }
+
+        .trip-item.active .trip-meta {
+            color: #fff;
         }
 
         .content {
@@ -125,6 +129,13 @@
             height: 500px;
             border-radius: 6px;
         }
+        .map-card:fullscreen, .map-card.expanded { background: white; padding: 12px; display: flex; flex-direction: column; }
+        .map-card.expanded { position: fixed; inset: 0; z-index: 10000; }
+        .map-card:fullscreen #map, .map-card.expanded #map { flex: 1; height: auto; }
+        .route-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+        .route-tools button { padding: 8px 10px; cursor: pointer; }
+        .timeline { width: 100%; margin: 10px 0; }
+        .content { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); }
 
         .charts {
             display: flex;
@@ -173,7 +184,7 @@
         }
 
         .video-badge {
-            background: #FF6B6B;
+            background: #c62828;
             color: white;
             padding: 4px 8px;
             border-radius: 4px;
@@ -193,7 +204,7 @@
 
         .video-path {
             font-size: 11px;
-            color: #999;
+            color: #595959;
             padding: 10px;
             background: #fafafa;
             border-left: 3px solid #667eea;
@@ -209,7 +220,7 @@
 
         .video-not-available {
             background: #f5f5f5;
-            color: #999;
+            color: #595959;
             padding: 40px 20px;
             text-align: center;
             border-radius: 6px;
@@ -228,15 +239,15 @@
         }
 
         #videoStatus .status-ok {
-            color: #27ae60;
+            color: #1b6b32;
         }
 
         #videoStatus .status-warning {
-            color: #e67e22;
+            color: #8a4600;
         }
 
         #videoStatus .status-error {
-            color: #e74c3c;
+            color: #b3261e;
         }
 
         /* Idle segment styles */
@@ -333,9 +344,9 @@
         }
 
         .sync-btn.active {
-            background: #4CAF50;
+            background: #2e7d32;
             color: white;
-            border-color: #4CAF50;
+            border-color: #2e7d32;
         }
 
         #video-time-indicator {
@@ -345,7 +356,7 @@
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
             font-size: 14px;
             font-weight: 500;
-            color: #667eea;
+            color: #4a56c9;
         }
 
         #video-end-badge {
@@ -358,38 +369,85 @@
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         }
 
+        #map-coordinate-control {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            font-size: 12px;
+            color: #2c3e50;
+        }
+
+        #map-coordinate-value {
+            display: block;
+            margin: 4px 0 8px;
+            font-family: monospace;
+            font-weight: 600;
+        }
+
+        #copy-map-coordinate {
+            border: 0;
+            border-radius: 3px;
+            padding: 5px 8px;
+            background: #4a56c9;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* Foco visível para navegação por teclado */
+        a:focus-visible, button:focus-visible, input:focus-visible, video:focus-visible, [role="button"]:focus-visible {
+            outline: 3px solid #1a237e;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 5px #fff;
+        }
+
+        .route-message { color: #9a4800; font-size: 13px; }
+
         @media (max-width: 1024px) {
             .main {
                 grid-template-columns: 1fr;
             }
-            .content, .videos-grid {
+            .content {
                 grid-template-columns: 1fr;
             }
             .sidebar {
                 max-height: none;
             }
         }
+
+        @media (max-width: 700px) {
+            .container { padding: 10px; }
+            .header { padding: 18px; }
+            .title { font-size: 24px; }
+            .card, .video-card, #trip-details, .chart-container { padding: 12px; }
+            .videos-grid { grid-template-columns: 1fr; }
+            #map { height: 340px; }
+            .route-tools button { flex: 1 1 140px; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="title">🎬 DDpai Dashboard</div>
-            <div class="subtitle">Florianópolis, Brazil • Multiple Trips (UTC-3)</div>
+            <div class="title">🎬 Estúdio de viagem</div>
+            <div class="subtitle">Explore suas viagens, vídeos e rotas</div>
         </div>
 
         <div id="app-content">
-            <div class="loading">📊 Loading database...</div>
+            <div class="loading" role="status">📊 Carregando banco de viagens...</div>
         </div>
     </div>
 
+    <script src="video-sync.js"></script>
     <script>
         let speedChart = null;
         let altitudeChart = null;
         let currentMap = null;
-        let currentPolyline = null;
+        let currentRouteLayer = null;
         let currentGroup = null;
         let currentPlayheadIndex = 0;  // Track playhead position for charts
+        let routeStart = null, routeEnd = null, selectionLayer = null;
+        let followVehicle = false;
 
         // Sync state management
         let syncState = {
@@ -449,13 +507,15 @@
             // Create sync mode toggle button
             const syncToggle = document.createElement('div');
             syncToggle.id = 'sync-mode-toggle';
+            syncToggle.setAttribute('role', 'group');
+            syncToggle.setAttribute('aria-labelledby', 'sync-mode-label');
             syncToggle.innerHTML = `
-                <label>🔄 Sync Mode:</label>
-                <button id="sync-independent" class="sync-btn">
-                    🎬 Independent
+                <span id="sync-mode-label" style="font-weight:600; margin-right:10px">🔄 Sincronização:</span>
+                <button id="sync-independent" class="sync-btn" type="button">
+                    🎬 Independente
                 </button>
-                <button id="sync-linked" class="sync-btn">
-                    🔗 Linked
+                <button id="sync-linked" class="sync-btn" type="button">
+                    🔗 Sincronizado
                 </button>
             `;
 
@@ -487,6 +547,8 @@
             const linkBtn = document.getElementById('sync-linked');
 
             if (indBtn && linkBtn) {
+                indBtn.setAttribute('aria-pressed', String(syncState.mode === 'independent'));
+                linkBtn.setAttribute('aria-pressed', String(syncState.mode !== 'independent'));
                 if (syncState.mode === 'independent') {
                     indBtn.classList.add('active');
                     linkBtn.classList.remove('active');
@@ -514,7 +576,7 @@
             const appContent = document.getElementById('app-content');
 
             if (GROUPS.length === 0) {
-                appContent.innerHTML = '<div class="error">No trips found. Run: ./build.sh</div>';
+                appContent.innerHTML = '<div class="error" role="alert">Nenhuma viagem encontrada. Execute: ./build.sh</div>';
                 return;
             }
 
@@ -524,20 +586,34 @@
 
                     <div class="content">
                         <div>
-                            <div class="card">
-                                <div id="map"></div>
+                            <div class="card map-card" id="map-card">
+                                <div class="route-tools">
+                                    <button type="button" id="map-fullscreen">Tela cheia</button>
+                                    <button type="button" id="map-follow" aria-pressed="false">Seguir veículo: não</button>
+                                    <button type="button" id="route-start">Marcar início</button>
+                                    <button type="button" id="route-end">Marcar fim</button>
+                                    <button type="button" id="route-gpx">Exportar GPX</button>
+                                    <button type="button" id="route-kml">Exportar KML</button>
+                                    <span id="route-selection" role="status">Selecione início e fim pela linha do tempo e use os botões de marcação</span>
+                                    <span id="route-message" class="route-message" role="status"></span>
+                                </div>
+                                <p style="font-size:12px; color:#555; margin:0 0 8px">GPX e KML exportam apenas a geometria do trecho; ao abrir em outro aplicativo, não há garantia de rota navegável ou de ruas idênticas.</p>
+                                <div id="map" role="region" aria-label="Mapa da viagem"></div>
+                                <input id="trip-timeline" class="timeline" type="range" min="0" value="0" aria-label="Posição na viagem">
+                                <p id="sync-warning" role="status" style="color:#9a4800; font-size:13px; margin-top:5px"></p>
+                                <p id="camera-coverage" role="status" style="color:#9a4800; font-size:13px; margin-top:5px"></p>
                             </div>
                             <div id="trip-details"></div>
                         </div>
 
                         <div class="charts">
                             <div class="chart-container">
-                                <div class="chart-title">Speed Profile (km/h)</div>
-                                <canvas id="chart-speed"></canvas>
+                                <div class="chart-title">Velocidade (km/h)</div>
+                                <canvas id="chart-speed" role="img" aria-label="Gráfico de velocidade em km/h ao longo da viagem"></canvas>
                             </div>
                             <div class="chart-container">
-                                <div class="chart-title">Altitude Profile (meters)</div>
-                                <canvas id="chart-altitude"></canvas>
+                                <div class="chart-title">Altitude (metros)</div>
+                                <canvas id="chart-altitude" role="img" aria-label="Gráfico de altitude em metros ao longo da viagem"></canvas>
                             </div>
                         </div>
                     </div>
@@ -545,49 +621,50 @@
 
                 <div class="videos-section">
                     <div id="videoStatus">
-                        <strong>Video Status:</strong> <span id="statusText" class="status-ok">Loading...</span><br>
-                        <strong>Notes:</strong> <span id="notesText">-</span>
+                        <strong>Estado dos vídeos:</strong> <span id="statusText" class="status-ok">Carregando...</span><br>
+                        <strong>Detalhes:</strong> <span id="notesText">-</span>
                     </div>
 
                     <div class="videos-grid">
                         <div class="video-card">
-                            <h3 id="rear-title">📹 Rear Camera <span class="video-badge" id="rear-badge">--</span></h3>
+                            <h3 id="rear-title">📹 Câmera traseira <span class="video-badge" id="rear-badge">--</span></h3>
                             <div id="rear-container" style="position: relative;">
-                                <video id="video-rear" controls width="100%">
-                                    Your browser doesn't support HTML5 video.
+                                <video id="video-rear" controls width="100%" aria-label="Vídeo da câmera traseira">
+                                    Seu navegador não suporta vídeos HTML5.
                                 </video>
-                                <div id="rear-play-btn" onclick="document.getElementById('video-rear').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                                <div id="rear-play-btn" aria-hidden="true" onclick="document.getElementById('video-rear').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
                                 </div>
                                 <div id="rear-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
-                                    ⏳ Loading video...
+                                    ⏳ Carregando vídeo...
                                 </div>
                                 <div class="video-path">📂 <span id="rear-path">-</span></div>
                             </div>
-                            <div id="rear-unavailable" class="video-not-available" style="display:none">📹 Rear video not available</div>
+                            <div id="rear-unavailable" class="video-not-available" style="display:none">📹 Vídeo traseiro indisponível</div>
                         </div>
 
                         <div class="video-card">
-                            <h3 id="front-title">📹 Front Camera <span class="video-badge" id="front-badge">--</span></h3>
+                            <h3 id="front-title">📹 Câmera dianteira <span class="video-badge" id="front-badge">--</span></h3>
                             <div id="front-container" style="position: relative;">
-                                <video id="video-front" controls width="100%">
-                                    Your browser doesn't support HTML5 video.
+                                <video id="video-front" controls width="100%" aria-label="Vídeo da câmera dianteira">
+                                    Seu navegador não suporta vídeos HTML5.
                                 </video>
-                                <div id="front-play-btn" onclick="document.getElementById('video-front').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                                <div id="front-play-btn" aria-hidden="true" onclick="document.getElementById('video-front').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
                                 </div>
                                 <div id="front-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
-                                    ⏳ Loading video...
+                                    ⏳ Carregando vídeo...
                                 </div>
                                 <div class="video-path">📂 <span id="front-path">-</span></div>
                             </div>
-                            <div id="front-unavailable" class="video-not-available" style="display:none">📹 Front video not available</div>
+                            <div id="front-unavailable" class="video-not-available" style="display:none">📹 Vídeo dianteiro indisponível</div>
                         </div>
                     </div>
                 </div>
             `;
 
             renderTripList(GROUPS);
+            initializeRouteTools();
             if (GROUPS.length > 0) {
                 selectTrip(GROUPS, 0);
             }
@@ -607,14 +684,124 @@
                     <div class="trip-date">${group.label}</div>
                     <div class="trip-meta">${group.distance_km} km • ${group.duration_min} min</div>
                 `;
-                item.onclick = () => selectTrip(GROUPS, idx);
+                item.setAttribute('role', 'button');
+                item.tabIndex = 0;
+                item.setAttribute('aria-current', idx === 0 ? 'true' : 'false');
+                const activate = () => {
+                    selectTrip(GROUPS, idx);
+                    list.querySelectorAll('.trip-item').forEach((el, i) => el.setAttribute('aria-current', String(i === idx)));
+                };
+                item.onclick = activate;
+                item.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        activate();
+                    }
+                });
                 list.appendChild(item);
             });
+        }
+
+        function updateRouteSelection() {
+            const status = document.getElementById('route-selection');
+            if (!status) return;
+            const routeMessage = document.getElementById('route-message');
+            if (routeMessage) routeMessage.textContent = '';
+            const describe = index => {
+                if (index === null || !currentGroup || !currentGroup.points[index]) return 'não marcado';
+                const seconds = currentGroup.points[index][5];
+                return Number.isFinite(seconds) && seconds >= 0 ? formatElapsed(seconds) : `ponto ${index + 1}`;
+            };
+            status.textContent = routeStart === null || routeEnd === null
+                ? `Início: ${describe(routeStart)} · Fim: ${describe(routeEnd)}`
+                : `Trecho: ${describe(Math.min(routeStart, routeEnd))} a ${describe(Math.max(routeStart, routeEnd))}`;
+            if (selectionLayer && currentMap) currentMap.removeLayer(selectionLayer);
+            selectionLayer = null;
+            if (currentMap && currentGroup && routeStart !== null && routeEnd !== null) {
+                const points = currentGroup.points.slice(Math.min(routeStart, routeEnd), Math.max(routeStart, routeEnd) + 1);
+                selectionLayer = L.polyline(points.map(p => [p[0], p[1]]), {color: '#ed6c02', weight: 6}).addTo(currentMap);
+            }
+        }
+
+        function formatElapsed(seconds) {
+            const total = Math.max(0, Math.floor(seconds));
+            const hours = Math.floor(total / 3600);
+            const minutes = Math.floor(total % 3600 / 60);
+            const remaining = total % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+        }
+
+        function initializeRouteTools() {
+            document.getElementById('map-follow').addEventListener('click', event => {
+                followVehicle = !followVehicle;
+                event.currentTarget.setAttribute('aria-pressed', String(followVehicle));
+                event.currentTarget.textContent = `Seguir veículo: ${followVehicle ? 'sim' : 'não'}`;
+            });
+            document.getElementById('map-fullscreen').addEventListener('click', () => {
+                const card = document.getElementById('map-card');
+                card.classList.toggle('expanded');
+                document.getElementById('map-fullscreen').textContent = card.classList.contains('expanded') ? 'Sair da tela cheia' : 'Tela cheia';
+                if (currentMap) setTimeout(() => currentMap.invalidateSize(), 100);
+            });
+            document.addEventListener('keydown', e => {
+                const card = document.getElementById('map-card');
+                if (e.key === 'Escape' && card.classList.contains('expanded')) document.getElementById('map-fullscreen').click();
+            });
+            document.addEventListener('fullscreenchange', () => {
+                document.getElementById('map-fullscreen').textContent = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
+                if (currentMap) setTimeout(() => currentMap.invalidateSize(), 100);
+            });
+            document.getElementById('route-start').addEventListener('click', () => { routeStart = currentPlayheadIndex; updateRouteSelection(); });
+            document.getElementById('route-end').addEventListener('click', () => { routeEnd = currentPlayheadIndex; updateRouteSelection(); });
+            document.getElementById('trip-timeline').addEventListener('input', e => {
+                seekToPoint(Number(e.target.value));
+            });
+            document.getElementById('route-gpx').addEventListener('click', () => exportRoute('gpx'));
+            document.getElementById('route-kml').addEventListener('click', () => exportRoute('kml'));
+        }
+
+        function exportRoute(format) {
+            const message = document.getElementById('route-message');
+            if (routeStart === null || routeEnd === null || routeStart === routeEnd) {
+                message.textContent = 'Marque dois pontos diferentes (início e fim) para definir o trecho.';
+                return;
+            }
+            message.textContent = '';
+            const points = currentGroup.points.slice(Math.min(routeStart, routeEnd), Math.max(routeStart, routeEnd) + 1);
+            let text;
+            if (format === 'gpx') {
+                text = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="DDpai" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Trecho DDpai</name><trkseg>' +
+                    points.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>`).join('') + '</trkseg></trk></gpx>';
+            } else {
+                text = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Trecho DDpai</name><LineString><coordinates>' +
+                    points.map(p => `${p[1]},${p[0]}`).join(' ') + '</coordinates></LineString></Placemark></Document></kml>';
+            }
+            const url = URL.createObjectURL(new Blob([text], {type: 'application/xml'}));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `trecho-${currentGroup.id}.${format}`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
         function selectTrip(GROUPS, idx) {
             const group = GROUPS[idx];
             currentGroup = group;
+            const hasInvalidOffsets = group.points.some((p, i) => i > 0 && p.length >= 6 && p[5] < group.points[i - 1][5]);
+            const baseSyncWarning = group.video_sync && group.video_sync.status === 'ok' ? '' :
+                group.video_sync && group.video_sync.status === 'partial' ? 'Alguns trechos não possuem correspondência de GPS e vídeo.' : hasInvalidOffsets
+                ? 'Os horários do GPS desta viagem têm inconsistências; a posição no mapa e nos gráficos pode não coincidir com os vídeos.'
+                : 'Não há dados suficientes para sincronizar GPS e vídeo nesta viagem.';
+            const confidenceWarning = group.video_sync && group.video_sync.status !== 'unavailable' ? syncConfidenceWarning(group.video_sync) : '';
+            document.getElementById('sync-warning').textContent = [baseSyncWarning, confidenceWarning].filter(Boolean).join(' ');
+            document.getElementById('camera-coverage').textContent = '';
+            currentPlayheadIndex = 0;
+            routeStart = null;
+            routeEnd = null;
+            const timeline = document.getElementById('trip-timeline');
+            timeline.max = Math.max(0, group.points.length - 1);
+            timeline.value = 0;
+            updateRouteSelection();
 
             // Update sidebar
             document.querySelectorAll('.trip-item').forEach((el, i) => {
@@ -650,7 +837,7 @@
 
                 // FRONT VIDEO IS BASELINE - only sync to front video in linked mode
                 // This prevents the "bouncing" effect from both videos firing timeupdate
-                if (syncState.mode === 'linked' && videoType !== 'front') {
+                if (syncState.mode === 'linked' && syncState.activeVideo && videoType !== syncState.activeVideo) {
                     return;  // Ignore rear video updates in linked mode, use front only
                 }
 
@@ -669,7 +856,15 @@
 
                 // Binary search on time_offset_s (points[i][5]); fallback to linear if old trips.json
                 let clampedIndex;
-                if (points.length && points[0].length >= 6) {
+                if (currentGroup.video_sync) {
+                    clampedIndex = pointAtVideoTime(currentGroup, videoType, currentTime);
+                    if (clampedIndex === null) {
+                        document.getElementById('camera-coverage').textContent = 'GPS indisponível neste momento do vídeo.';
+                        syncState.isSyncing = false;
+                        return;
+                    }
+                    document.getElementById('camera-coverage').textContent = '';
+                } else if (points.length && points[0].length >= 6) {
                     let lo = 0, hi = points.length - 1;
                     while (lo < hi) {
                         const mid = (lo + hi + 1) >> 1;
@@ -694,23 +889,6 @@
                 syncState.isSyncing = false;
             }
 
-            function onVideoSeeking(e, videoType) {
-                if (syncState.isSyncing) return;
-                syncState.lastUpdateSource = 'video';
-
-                const videoElement = e.target;
-                const seekTime = videoElement.currentTime;
-
-                // If linked mode, sync the other video
-                if (syncState.mode === 'linked') {
-                    if (videoType === 'rear' && frontVideo && (frontVideo.dataset.lazySrc)) {
-                        frontVideo.currentTime = seekTime;
-                    } else if (videoType === 'front' && rearVideo && (rearVideo.dataset.lazySrc)) {
-                        rearVideo.currentTime = seekTime;
-                    }
-                }
-            }
-
             // Remove existing listeners to prevent duplicates
             if (rearVideo) {
                 const newRearVideo = rearVideo.cloneNode(true);
@@ -726,24 +904,27 @@
             // Attach lazy load listeners to the cloned elements (cloneNode strips event listeners)
             attachLazyLoadListener(rearVideo);
             attachLazyLoadListener(frontVideo);
+            syncState.onCoverageChange = (camera, available) => {
+                document.getElementById('camera-coverage').textContent = available ? '' :
+                    `A câmera ${camera === 'front' ? 'dianteira' : 'traseira'} não possui correspondência neste trecho.`;
+            };
+            linkVideos(rearVideo, frontVideo, syncState, () => currentGroup);
 
             // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
             if (rearVideo) {
-                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; syncState.activeVideo = 'rear'; });
+                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; });
                 rearVideo.addEventListener('pause', () => { document.getElementById('rear-play-btn').style.display = 'flex'; });
                 rearVideo.addEventListener('click', () => { syncState.activeVideo = 'rear'; });
                 rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
-                rearVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'rear'));
                 rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
             }
 
             if (frontVideo) {
-                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; syncState.activeVideo = 'front'; });
+                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; });
                 frontVideo.addEventListener('pause', () => { document.getElementById('front-play-btn').style.display = 'flex'; });
                 frontVideo.addEventListener('click', () => { syncState.activeVideo = 'front'; });
                 // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
                 frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
-                frontVideo.addEventListener('seeking', (e) => onVideoSeeking(e, 'front'));
                 frontVideo.addEventListener('error', (e) => { console.error('❌ Front error:', frontVideo.error?.message); });
             }
         }
@@ -757,27 +938,27 @@
             const point = currentGroup.points[gpsIndex];
             const [lat, lon, speed, altitude, heading] = point;
 
-            // Remove old marker if exists
+            const popup = `
+                <b>Posição atual</b><br/>
+                Velocidade: ${speed.toFixed(1)} km/h<br/>
+                Altitude: ${altitude.toFixed(1)} m<br/>
+                Direção: ${heading != null ? heading.toFixed(1) + '°' : 'N/A'}
+            `;
             if (window.currentMarker) {
-                currentMap.removeLayer(window.currentMarker);
-            }
-
-            // Add new marker with blue circle icon
-            window.currentMarker = L.marker([lat, lon], {
+                window.currentMarker.setLatLng([lat, lon]);
+                window.currentMarker.setPopupContent(popup);
+            } else {
+                window.currentMarker = L.marker([lat, lon], {
                 icon: L.icon({
                     iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI4IiBmaWxsPSIjMDA4MEZGIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==',
                     iconSize: [32, 32],
                     iconAnchor: [16, 16]
                 })
-            }).addTo(currentMap).bindPopup(`
-                <b>Current Position</b><br/>
-                Speed: ${speed.toFixed(1)} km/h<br/>
-                Altitude: ${altitude.toFixed(1)} m<br/>
-                Heading: ${heading != null ? heading.toFixed(1) + '°' : 'N/A'}
-            `);
+                }).addTo(currentMap).bindPopup(popup);
+            }
 
             // Pan map to marker
-            currentMap.setView([lat, lon], currentMap.getZoom());
+            if (followVehicle) currentMap.panTo([lat, lon], {animate: false});
         }
 
         function showVideoTimeIndicator(currentTime, totalTime) {
@@ -796,7 +977,7 @@
             if (indicator) {
                 const timeStr = `${Math.floor(currentTime / 60)}:${String(Math.floor(currentTime % 60)).padStart(2, '0')}`;
                 const totalStr = `${Math.floor(totalTime / 60)}:${String(Math.floor(totalTime % 60)).padStart(2, '0')}`;
-                indicator.innerHTML = `<b>▶ Video:</b> ${timeStr} / ${totalStr}`;
+                indicator.innerHTML = `<b>▶ Vídeo:</b>${timeStr} / ${totalStr}`;
             }
         }
 
@@ -810,6 +991,7 @@
                 window.endBadge.onAdd = function(map) {
                     let div = L.DomUtil.create('div');
                     div.id = 'video-end-badge';
+                    div.setAttribute('role', 'status');
                     return div;
                 };
                 window.endBadge.addTo(currentMap);
@@ -817,7 +999,87 @@
 
             const badge = document.getElementById('video-end-badge');
             if (badge) {
-                badge.innerHTML = `⚠️ <b>Video ended at ${endTimeStr}</b>`;
+                badge.innerHTML = `⚠️ <b>Vídeo termina em ${endTimeStr}</b>`;
+            }
+        }
+
+        function initializeMapCoordinateControl() {
+            if (window.mapCoordinateControl) return;
+
+            window.mapCoordinateControl = L.control({position: 'bottomleft'});
+            window.mapCoordinateControl.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control map-coordinate-control');
+                div.id = 'map-coordinate-control';
+                div.innerHTML = `
+                    <strong>Coordenada clicada</strong>
+                    <span id="map-coordinate-value">Clique no mapa</span>
+                    <button id="copy-map-coordinate" type="button" disabled>Copiar</button>
+                `;
+                L.DomEvent.disableClickPropagation(div);
+                L.DomEvent.disableScrollPropagation(div);
+                return div;
+            };
+            window.mapCoordinateControl.addTo(currentMap);
+
+            document.getElementById('copy-map-coordinate').addEventListener('click', copyMapCoordinate);
+        }
+
+        function setMapCoordinate(lat, lon) {
+            const coordinate = `${decimalToDms(lat, 'lat')}, ${decimalToDms(lon, 'lon')}`;
+            const value = document.getElementById('map-coordinate-value');
+            const button = document.getElementById('copy-map-coordinate');
+            if (value) value.textContent = coordinate;
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Copiar';
+                button.dataset.coordinate = coordinate;
+            }
+        }
+
+        function resetMapCoordinate() {
+            const value = document.getElementById('map-coordinate-value');
+            const button = document.getElementById('copy-map-coordinate');
+            if (value) value.textContent = 'Clique no mapa';
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Copiar';
+                delete button.dataset.coordinate;
+            }
+        }
+
+        function decimalToDms(value, axis) {
+            const absolute = Math.abs(value);
+            const degrees = Math.floor(absolute);
+            const minutesDecimal = (absolute - degrees) * 60;
+            const minutes = Math.floor(minutesDecimal);
+            const seconds = ((minutesDecimal - minutes) * 60).toFixed(2);
+            const hemisphere = axis === 'lat'
+                ? (value >= 0 ? 'N' : 'S')
+                : (value >= 0 ? 'E' : 'W');
+            return `${degrees}° ${minutes}' ${seconds}\" ${hemisphere}`;
+        }
+
+        async function copyMapCoordinate() {
+            const button = document.getElementById('copy-map-coordinate');
+            const coordinate = button && button.dataset.coordinate;
+            if (!coordinate) return;
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(coordinate);
+                } else {
+                    const input = document.createElement('textarea');
+                    input.value = coordinate;
+                    input.style.position = 'fixed';
+                    input.style.opacity = '0';
+                    document.body.appendChild(input);
+                    input.select();
+                    document.execCommand('copy');
+                    input.remove();
+                }
+                button.textContent = 'Copiado!';
+            } catch (error) {
+                button.textContent = 'Falhou — selecione o texto';
             }
         }
 
@@ -828,11 +1090,21 @@
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 }).addTo(currentMap);
+                initializeMapCoordinateControl();
             }
 
-            // Remove old polyline
-            if (currentPolyline) {
-                currentMap.removeLayer(currentPolyline);
+            // Each selected trip owns one layer group. Clearing it prevents routes
+            // from previously selected sidebar items remaining on the map.
+            if (currentRouteLayer) {
+                currentRouteLayer.clearLayers();
+                currentMap.removeLayer(currentRouteLayer);
+            }
+            currentRouteLayer = L.layerGroup().addTo(currentMap);
+            resetMapCoordinate();
+
+            if (window.currentMarker) {
+                currentMap.removeLayer(window.currentMarker);
+                window.currentMarker = null;
             }
 
             // Create index set for idle ranges
@@ -861,7 +1133,7 @@
                         weight: isIdle ? 2 : 3,
                         dashArray: isIdle ? '5,5' : null,
                         className: isIdle ? 'idle-segment' : 'active-segment'
-                    }).addTo(currentMap);
+                    }).addTo(currentRouteLayer);
 
                     currentSegment = [[point[0], point[1]]];
                     isIdle = pointIsIdle;
@@ -878,7 +1150,7 @@
                     weight: isIdle ? 2 : 3,
                     dashArray: isIdle ? '5,5' : null,
                     className: isIdle ? 'idle-segment' : 'active-segment'
-                }).addTo(currentMap);
+                }).addTo(currentRouteLayer);
             }
 
             // Fit bounds to all points
@@ -890,6 +1162,8 @@
             currentMap.off('click');
             currentMap.on('click', function(e) {
                 if (syncState.isSyncing) return;
+
+                setMapCoordinate(e.latlng.lat, e.latlng.lng);
 
                 syncState.isSyncing = true;
                 syncState.lastUpdateSource = 'map';
@@ -910,34 +1184,39 @@
                     }
                 });
 
-                // Calculate seek time
-                const gps_duration_s = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
-                // Use time_offset_s directly from closest point; fallback to linear for old trips.json
-                const seekTime = (points[closestIndex] && points[closestIndex].length >= 6)
-                    ? points[closestIndex][5]
-                    : (closestIndex / points.length) * gps_duration_s;
-
-                // Seek video(s)
-                const rearVideo = document.getElementById('video-rear');
-                const frontVideo = document.getElementById('video-front');
-
-                if (syncState.mode === 'linked') {
-                    if (rearVideo && (rearVideo.dataset.lazySrc)) rearVideo.currentTime = seekTime;
-                    if (frontVideo && (frontVideo.dataset.lazySrc)) frontVideo.currentTime = seekTime;
-                } else {
-                    // Independent mode: only seek the active video
-                    if (syncState.activeVideo === 'rear' && rearVideo && (rearVideo.dataset.lazySrc)) {
-                        rearVideo.currentTime = seekTime;
-                    } else if (syncState.activeVideo === 'front' && frontVideo && (frontVideo.dataset.lazySrc)) {
-                        frontVideo.currentTime = seekTime;
-                    } else if (rearVideo && (rearVideo.dataset.lazySrc)) {
-                        rearVideo.currentTime = seekTime;
-                    }
-                }
-
-                updateMapMarker(closestIndex);
                 syncState.isSyncing = false;
+                seekToPoint(closestIndex);
             });
+        }
+
+        // Navigate by index so repeated coordinates remain distinguishable.
+        function seekToPoint(index) {
+            if (!currentGroup || !currentGroup.points[index]) return;
+            const points = currentGroup.points;
+            const gpsDuration = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
+            const defaultTime = points[index].length >= 6 ? points[index][5] : (index / points.length) * gpsDuration;
+            syncState.isSyncing = true;
+            const rearVideo = document.getElementById('video-rear');
+            const frontVideo = document.getElementById('video-front');
+            const targets = syncState.mode === 'linked' ? [rearVideo, frontVideo] :
+                [syncState.activeVideo === 'front' ? frontVideo : rearVideo];
+            const missingCameras = [];
+            for (const video of targets) {
+                const camera = video && video.id === 'video-front' ? 'front' : 'rear';
+                const seekTime = currentGroup.video_sync ? timeForPoint(currentGroup, camera, index) : defaultTime;
+                if (video && video.dataset.lazySrc && seekTime === null) {
+                    missingCameras.push(camera === 'front' ? 'dianteira' : 'traseira');
+                    if (syncState.pauseForMissingCoverage) syncState.pauseForMissingCoverage(video);
+                }
+                if (!video || !video.dataset.lazySrc || !Number.isFinite(seekTime) || seekTime < 0) continue;
+                if (!video.hasAttribute('src')) video.src = video.dataset.lazySrc;
+                video.currentTime = seekTime;
+            }
+            document.getElementById('camera-coverage').textContent = missingCameras.length ?
+                `Sem vídeo ${missingCameras.join(' e ')} para este ponto.` : '';
+            updateMapMarker(index);
+            updateChartsPlayhead(index, points);
+            syncState.isSyncing = false;
         }
 
         function updateCharts(points) {
@@ -971,6 +1250,10 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (event, elements, chart) => {
+                        const x = chart.scales.x.getValueForPixel(event.x);
+                        if (Number.isFinite(x)) seekToPoint(Math.max(0, Math.min(points.length - 1, Math.round(x))));
+                    },
                     plugins: {legend: {display: false}, playhead: {}},
                     scales: {
                         y: {beginAtZero: true},
@@ -998,6 +1281,10 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (event, elements, chart) => {
+                        const x = chart.scales.x.getValueForPixel(event.x);
+                        if (Number.isFinite(x)) seekToPoint(Math.max(0, Math.min(points.length - 1, Math.round(x))));
+                    },
                     plugins: {legend: {display: false}, playhead: {}},
                     scales: {x: {display: false}}
                 }
@@ -1007,6 +1294,9 @@
         function updateChartsPlayhead(pointIndex, points) {
             // Update playhead position and redraw charts
             currentPlayheadIndex = Math.max(0, Math.min(pointIndex, points.length - 1));
+            const timeline = document.getElementById('trip-timeline');
+            if (timeline) timeline.value = currentPlayheadIndex;
+            if (timeline && Number.isFinite(points[currentPlayheadIndex][5])) timeline.setAttribute('aria-valuetext', formatElapsed(points[currentPlayheadIndex][5]));
 
             // Trigger redraw of both charts
             if (speedChart) {
@@ -1133,55 +1423,55 @@
         function updateTripDetails(group) {
             const detailsDiv = document.getElementById('trip-details');
             if (!detailsDiv) return;
-            let html = '<h3>Trip Details</h3>';
+            let html = '<h3>Detalhes da viagem</h3>';
 
             // Basic trip statistics
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Date</span>';
+            html += '<span class="trip-stat-label">Data</span>';
             html += '<span class="trip-stat-value">' + group.label + '</span>';
             html += '</div>';
 
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Distance</span>';
+            html += '<span class="trip-stat-label">Distância</span>';
             html += '<span class="trip-stat-value">' + group.distance_km.toFixed(2) + ' km</span>';
             html += '</div>';
 
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Duration</span>';
+            html += '<span class="trip-stat-label">Duração</span>';
             html += '<span class="trip-stat-value">' + group.duration_min.toFixed(1) + ' min</span>';
             html += '</div>';
 
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Max Speed</span>';
+            html += '<span class="trip-stat-label">Velocidade máxima</span>';
             html += '<span class="trip-stat-value">' + group.max_speed.toFixed(1) + ' km/h</span>';
             html += '</div>';
 
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Avg Speed</span>';
+            html += '<span class="trip-stat-label">Velocidade média</span>';
             html += '<span class="trip-stat-value">' + group.avg_speed.toFixed(1) + ' km/h</span>';
             html += '</div>';
 
             html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">GPS Points</span>';
-            html += '<span class="trip-stat-value">' + (group.points ? group.points.length : 0) + ' records</span>';
+            html += '<span class="trip-stat-label">Pontos GPS</span>';
+            html += '<span class="trip-stat-value">' + (group.points ? group.points.length : 0) + ' registros</span>';
             html += '</div>';
 
             // Add idle segment information
             if (group.idle_segments && group.idle_segments.length > 0) {
                 html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid #eee;">';
-                html += '<h4 style="font-size: 13px; font-weight: 600; color: #555; margin-top: 12px; margin-bottom: 8px;">⏸ Idle Segments (' + group.idle_segments.length + ')</h4>';
+                html += '<h4 style="font-size: 13px; font-weight: 600; color: #555; margin-top: 12px; margin-bottom: 8px;">⏸ Paradas (' + group.idle_segments.length + ')</h4>';
 
                 for (let i = 0; i < group.idle_segments.length; i++) {
                     let seg = group.idle_segments[i];
                     html += '<div class="idle-info">';
-                    html += '<strong>Segment ' + (i + 1) + ':</strong> ' +
+                    html += '<strong>Trecho ' + (i + 1) + ':</strong> ' +
                             (seg.duration_s / 60).toFixed(1) + ' min, ' +
                             seg.distance_km.toFixed(2) + ' km<br>';
-                    html += '<small>GPS Points: ' + (seg.end_index - seg.start_index + 1) + ' records</small>';
+                    html += '<small>Pontos GPS: ' + (seg.end_index - seg.start_index + 1) + ' registros</small>';
                     html += '</div>';
                 }
             } else {
-                html += '<div style="padding: 12px 0; color: #999; font-size: 12px;">No idle segments detected</div>';
+                html += '<div style="padding: 12px 0; color: #999; font-size: 12px;">Nenhuma parada detectada</div>';
             }
 
             detailsDiv.innerHTML = html;

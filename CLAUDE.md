@@ -14,10 +14,10 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 # Rebuild trip database from .git archives
 ./build.sh
 
-# Start the web server on localhost:8000
+# Start the web server on localhost:8765
 ./run.sh
 
-# Open browser to http://localhost:8000/web/
+# Open browser to http://localhost:8765/web/
 
 # Auto-watch SD card for new recordings (optional)
 ./watch.sh             # Sequential build (default)
@@ -195,8 +195,8 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 **Serve the dashboard locally**
 ```bash
 ./run.sh
-# Starts: python3 -m http.server 8000
-# Access: http://localhost:8000/web/
+# Starts: python3 -m src.processing.http_server 8765 (static server with Range support)
+# Access: http://localhost:8765/web/
 ```
 
 **Watch for new SD card recordings** (watch.sh)
@@ -211,7 +211,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 ```bash
 # Open web/index.html in browser
 ./run.sh
-# Then: http://localhost:8000/web/
+# Then: http://localhost:8765/web/
 # - Select trip with video
 # - Play video: map marker follows playback
 # - Click map: video seeks to that GPS point
@@ -296,7 +296,7 @@ No automated test suite. Manual validation:
 
 1. **Check trip detection**: `./build.sh` prints detected groups + validation results
 2. **Verify database**: `python3 -c "import json; d=json.load(open('data/trips.json')); print(len(d['trips']), 'trips')"`
-3. **Test UI**: `./run.sh` → open http://localhost:8000/web/ → select trip, play video
+3. **Test UI**: `./run.sh` → open http://localhost:8765/web/ → select trip, play video
 4. **Check DevTools**: Browser Console for JavaScript errors, Network tab for JSON fetch
 5. **Validate maps**: Ensure Leaflet polyline renders for each trip (requires HTTP server)
 
@@ -350,7 +350,7 @@ No automated test suite. Manual validation:
 ```
 ddpai_extractor/
 ├── build.sh              # Build entry point (calls src.extraction.build_database)
-├── run.sh               # Run entry point (starts HTTP server on port 8000)
+├── run.sh               # Run entry point (starts HTTP server on port 8765)
 ├── watch.sh             # Watchdog script (polls SD card for new TAR files)
 ├── CLAUDE.md            # This file
 ├── README.md            # User documentation

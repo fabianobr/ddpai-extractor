@@ -1,5 +1,6 @@
 # Personal dashcam data (never commit)
 working_data/
+extracted_photos/
 merged_videos/
 data/trips.json
 data/trips.json.bak
@@ -20,4 +21,9 @@ backup/
 # Large binary files
 *.mp4
 *.tar
-*.git  # dashcam TAR archives have .git extension
+# dashcam TAR archives have .git extension
+*.git
+
+# Local run outputs and browser-tool artifacts (never commit)
+runs/
+.playwright-mcp/
