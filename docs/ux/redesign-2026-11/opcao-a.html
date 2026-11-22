@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estúdio: Cinema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Opção A — "Cinema": o vídeo é o protagonista, como num editor/monitor profissional.
+   Só escuro, de propósito: grafite neutro de mesa de corte, preto real apenas no monitor.
+   Âmbar (luz de sódio da estrada) marca o "agora": cabeça de reprodução e trecho selecionado. */
+:root {
+  color-scheme: dark;
+  --app: #17181b;
+  --panel: #212327;
+  --panel-2: #2a2d32;
+  --raise: #33363c;
+  --line: #34373d;
+  --line-2: #474b52;
+  --fg: #eceae4;
+  --fg-2: #a9abb2;
+  --fg-3: #7b7e86;
+  --monitor: #000;
+  --amber: #ffb23e;
+  --amber-ink: #241500;
+  --amber-wash: rgba(255, 178, 62, .13);
+  --front: #3e8edb;          /* faixa câmera dianteira (validada p/ daltonismo com --rear) */
+  --rear: #2fa88a;           /* faixa câmera traseira */
+  --max: #ff6b5e;
+  --stop: #8b8f98;
+  --ok: #6cc59b;
+  --warn: #e9c46a;
+  --r-panel: 6px;
+  --r-ctl: 5px;
+  --float-shadow: 0 10px 30px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .06);
+  --gut-l: max(16px, env(safe-area-inset-left, 0px));
+  --gut-r: max(16px, env(safe-area-inset-right, 0px));
+  --insp: 312px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--app); color: var(--fg);
+  font: 400 14px/1.4 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.cond { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.app {
+  height: 100vh; height: 100dvh; display: grid;
+  grid-template-rows: 52px minmax(0, 1fr) auto auto; gap: 8px;
+  padding: 0 var(--gut-r) 12px var(--gut-l);
+}
+
+/* ---------- barra superior ---------- */
+.top { display: flex; align-items: center; gap: 12px; position: relative; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: .01em; color: var(--fg-2); white-space: nowrap; }
+.brand svg { width: 22px; height: 22px; }
+.sep { width: 1px; height: 22px; background: var(--line); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--line); background: var(--panel); border-radius: var(--r-ctl); cursor: pointer;
+}
+.btn:hover { background: var(--panel-2); border-color: var(--line-2); }
+.iconbtn { width: 34px; padding: 0; justify-content: center; }
+.trip-btn { gap: 10px; min-width: 0; }
+.trip-btn b { font-weight: 600; }
+.trip-btn span { color: var(--fg-2); white-space: nowrap; }
+.spacer { flex: 1; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px;
+  border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg-2); cursor: help; font-size: 13px;
+}
+.pill .i { width: 16px; height: 16px; }
+.pill[data-state=ok] .i { color: var(--ok); }
+.pill[data-state=warn] { color: var(--warn); border-color: rgba(233, 196, 106, .45); background: rgba(233, 196, 106, .08); }
+.tipwrap { position: relative; }
+.tip {
+  position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; width: 280px; padding: 10px 12px;
+  background: var(--raise); color: var(--fg); border-radius: var(--r-ctl); box-shadow: var(--float-shadow);
+  font-size: 13px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s;
+}
+.tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; visibility: visible; }
+
+.pop {
+  position: absolute; z-index: 50; top: calc(100% + 6px); background: var(--panel-2); border-radius: var(--r-panel);
+  box-shadow: var(--float-shadow); padding: 6px; min-width: 240px;
+}
+.pop[hidden] { display: none; }
+.pop h3 { margin: 6px 8px 4px; font-size: 12px; font-weight: 500; color: var(--fg-3); }
+.mi {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; background: none;
+  border-radius: var(--r-ctl); text-align: left; cursor: pointer;
+}
+.mi:hover, .mi:focus-visible { background: var(--raise); outline: none; }
+.mi .i { color: var(--fg-2); }
+.mi small { color: var(--fg-3); margin-left: auto; padding-left: 12px; }
+.mi-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+.trips-pop { left: 0; width: 340px; }
+.trip-mi { align-items: center; }
+.trip-mi svg.thumb { width: 72px; height: 44px; background: #15171a; border-radius: 4px; flex: none; }
+.trip-mi .tm { display: grid; gap: 2px; }
+.trip-mi .tm b { font-weight: 600; }
+.trip-mi .tm span { color: var(--fg-3); font-size: 13px; }
+.trip-mi[aria-current=true] { background: var(--raise); box-shadow: inset 0 0 0 1px var(--line-2); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg-2); }
+.badge .i { width: 14px; height: 14px; }
+.badge.warn { color: var(--warn); }
+.more-pop { right: 0; }
+
+/* ---------- palco: monitor + inspetor ---------- */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) var(--insp); gap: 8px; min-height: 0; position: relative; }
+.viewer { position: relative; background: var(--monitor); border-radius: var(--r-panel); overflow: hidden; container-type: size; display: grid; place-items: center; min-height: 0; }
+.screen { position: relative; width: min(100cqw, calc(100cqh * 16 / 9)); height: min(100cqh, calc(100cqw * 9 / 16)); }
+.screen.split { width: min(100cqw, calc(100cqh * 32 / 9)); height: min(100cqh, calc(100cqw * 9 / 32)); display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.cam { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(180deg, #44617a 0%, #8aa4b8 42%, #59616a 52%, #2b2e33 100%); }
+.cam.night { background: linear-gradient(180deg, #05070a 0%, #0b0e13 60%, #1a1b1f 100%); }
+.screen.split .cam { position: relative; }
+.cam.pip {
+  inset: auto 14px 14px auto; width: 27%; aspect-ratio: 16 / 9; border-radius: 4px; z-index: 3;
+  box-shadow: var(--float-shadow); cursor: pointer;
+}
+.screen.split .cam.pip { inset: auto; width: auto; aspect-ratio: auto; border-radius: 0; box-shadow: none; cursor: default; }
+.fr { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s ease; }
+.fr.on { opacity: 1; }
+/* a câmera principal esconde o carimbo gravado no rodapé do quadro: o HUD passa a ser a fonte do horário */
+.cam.main .fr, .screen.split .cam .fr { height: 113%; object-position: 50% 0; }
+.playing .fr.on { animation: drift 7s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: scale(1); } to { transform: scale(1.045) translateY(-.6%); } }
+.camtag {
+  position: absolute; top: 8px; left: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 7px 2px 5px; border-radius: 3px; background: rgba(0, 0, 0, .55); font-size: 12px; font-weight: 500;
+}
+.camtag .s { display: none; }
+.camtag i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.cam.main .camtag { top: 52px; left: 14px; }
+.screen.split .cam .camtag { top: 52px; }
+.nocover {
+  position: absolute; inset: 0; z-index: 2; display: none; place-content: center; text-align: center; gap: 6px; padding: 8px;
+  background: repeating-linear-gradient(135deg, rgba(20, 21, 24, .92) 0 10px, rgba(30, 32, 36, .92) 10px 20px); color: var(--fg-2); font-size: 13px;
+}
+.nocover .i { margin: 0 auto; width: 22px; height: 22px; }
+.cam.gap .nocover { display: grid; }
+.held { position: absolute; right: 6px; bottom: 6px; z-index: 2; font-size: 11px; padding: 1px 6px; border-radius: 3px; background: rgba(0, 0, 0, .65); color: var(--fg-2); display: none; }
+.unlinked .cam[data-cam=rear] .held { display: block; }
+
+.viewctl { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; }
+.seg { display: inline-flex; background: rgba(23, 24, 27, .78); border-radius: var(--r-ctl); padding: 2px; backdrop-filter: blur(8px); }
+.seg button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; border: 0; background: none; border-radius: 4px; cursor: pointer; color: var(--fg-2); }
+.seg button[aria-pressed=true] { background: var(--raise); color: var(--fg); }
+.seg button:hover { color: var(--fg); }
+
+.hud {
+  position: absolute; z-index: 4; left: 14px; bottom: 14px; display: flex; align-items: flex-end; gap: 18px;
+  padding: 8px 14px 9px; border-radius: 4px; background: rgba(12, 13, 15, .72); backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.hud .clk { font-size: 34px; line-height: 1; font-weight: 600; letter-spacing: .01em; }
+.hud .v { display: grid; gap: 1px; }
+.hud .v b { font-size: 26px; line-height: 1; font-weight: 600; }
+.hud .v small { font-family: 'Barlow', sans-serif; font-size: 11px; color: var(--fg-2); }
+.hud .v.spd b { color: #fff; }
+
+/* mini-mapa flutuante (posicionado sobre o monitor) */
+.minimap {
+  position: absolute; z-index: 6; top: 12px; right: calc(var(--insp) + 8px + 12px); width: 272px; height: 172px;
+  border-radius: var(--r-panel); overflow: hidden; background: #1e2125; box-shadow: var(--float-shadow);
+  transition: width .25s ease, height .25s ease;
+}
+.minimap.big { width: min(640px, calc(100% - var(--insp) - 40px)); height: min(420px, calc(100% - 24px)); }
+.minimap svg.map { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.minimap svg.map.is-panning { cursor: grabbing; }
+.mapctl { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.mapctl button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 4px; background: rgba(23, 24, 27, .82); cursor: pointer; color: var(--fg-2); }
+.mapctl button:hover, .mapctl button[aria-pressed=true] { color: var(--fg); background: var(--raise); }
+.mapctl .i { width: 16px; height: 16px; }
+.coordchip {
+  position: absolute; left: 6px; bottom: 6px; right: 6px; display: none; align-items: center; gap: 8px;
+  padding: 4px 4px 4px 8px; border-radius: 4px; background: rgba(23, 24, 27, .9); font-size: 12px;
+}
+.coordchip.show { display: flex; }
+.coordchip span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coordchip button { height: 24px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 4px; background: none; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
+.coordchip .i { width: 14px; height: 14px; }
+.maplabel { position: absolute; left: 8px; top: 8px; font-size: 12px; color: var(--fg-2); pointer-events: none; }
+
+/* inspetor */
+.inspector { background: var(--panel); border-radius: var(--r-panel); overflow: auto; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.inspector h2 { margin: 0; font-size: 13px; font-weight: 500; color: var(--fg-3); }
+.trip-day { color: var(--fg-2); font-size: 13px; }
+.trip-time { font-size: 30px; font-weight: 600; line-height: 1.05; margin-top: 2px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-top: 12px; }
+.stat b { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.1; }
+.stat b small { font-size: 14px; font-weight: 500; color: var(--fg-2); margin-left: 2px; }
+.stat span { font-size: 12px; color: var(--fg-3); }
+.marks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 1px; }
+.marks button {
+  width: 100%; display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center; padding: 5px 8px;
+  border: 0; background: none; border-radius: var(--r-ctl); cursor: pointer; text-align: left;
+}
+.marks button:hover { background: var(--panel-2); }
+.marks button .i { width: 17px; height: 17px; color: var(--fg-2); }
+.marks button time { color: var(--fg-3); font-size: 13px; }
+.marks li.now button { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--amber); }
+.marks li[data-type=max] .i { color: var(--max); }
+.marks li[data-type=gap] .i { color: var(--warn); }
+.selbox { border: 1px solid var(--line); border-radius: var(--r-panel); padding: 12px; display: grid; gap: 10px; }
+.selbox .range { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 600; line-height: 1; }
+.selbox .meta { color: var(--fg-2); font-size: 13px; }
+.selbox .row { display: flex; gap: 6px; flex-wrap: wrap; position: relative; }
+.btn.primary { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); font-weight: 600; }
+.btn.primary:hover { background: #ffc15f; }
+.btn.small { height: 30px; padding: 0 10px; font-size: 13px; }
+.note { font-size: 12px; color: var(--fg-3); line-height: 1.4; margin: 0; }
+details.tech { border-top: 1px solid var(--line); padding-top: 10px; }
+details.tech summary { cursor: pointer; color: var(--fg-2); font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px; }
+details.tech summary::-webkit-details-marker { display: none; }
+details.tech summary .i { width: 16px; height: 16px; transition: transform .15s; }
+details.tech[open] summary .i { transform: rotate(90deg); }
+details.tech dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 10px 0 0; font-size: 12px; }
+details.tech dt { color: var(--fg-3); }
+details.tech dd { margin: 0; color: var(--fg-2); word-break: break-all; }
+.proto { margin-top: auto; font-size: 11px; color: var(--fg-3); }
+
+/* ---------- transporte ---------- */
+.transport {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  background: var(--panel); border-radius: var(--r-panel); padding: 6px 12px; min-height: 54px;
+}
+.now { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.now .clk { font-size: 28px; font-weight: 600; line-height: 1; }
+.now .el { color: var(--fg-2); font-size: 13px; white-space: nowrap; }
+.tc { display: flex; align-items: center; gap: 6px; }
+.tbtn { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: none; border-radius: 50%; cursor: pointer; color: var(--fg); }
+.tbtn:hover { background: var(--panel-2); }
+.tbtn .i { width: 22px; height: 22px; }
+.tbtn.play { width: 44px; height: 44px; background: var(--fg); color: var(--app); }
+.tbtn.play:hover { background: #fff; }
+.tbtn.play .i { width: 20px; height: 20px; }
+.rate { margin-left: 10px; }
+.rate.seg { background: var(--app); }
+.rate.seg button { height: 28px; padding: 0 9px; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 600; }
+.tright { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.ghost { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 0; background: none; border-radius: var(--r-ctl); color: var(--fg-2); cursor: pointer; font-size: 13px; }
+.ghost:hover { background: var(--panel-2); color: var(--fg); }
+.ghost[aria-pressed=false] { color: var(--warn); }
+.ghost kbd { font: 500 11px 'Barlow', sans-serif; padding: 0 4px; border: 1px solid var(--line-2); border-radius: 3px; color: var(--fg-3); }
+
+/* ---------- linha do tempo (estilo editor) ---------- */
+.timeline { background: var(--panel); border-radius: var(--r-panel); display: grid; grid-template-columns: 92px minmax(0, 1fr); padding: 4px 14px 10px 0; }
+.gutter { display: grid; grid-template-rows: 40px 16px 16px 58px 34px; row-gap: 5px; padding-top: 2px; }
+.gutter div { display: flex; align-items: center; gap: 6px; padding-left: 12px; font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+.gutter i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+.lanes { position: relative; display: grid; grid-template-rows: 40px 16px 16px 58px 34px; row-gap: 5px; padding-top: 2px; cursor: text; touch-action: none; }
+.lanes:focus-visible { outline-offset: 4px; }
+.ruler { position: relative; border-bottom: 1px solid var(--line); }
+.tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: var(--line-2); }
+.tick.maj { height: 10px; background: var(--fg-3); }
+.tick span { position: absolute; bottom: 8px; left: 4px; font-size: 11px; color: var(--fg-3); white-space: nowrap; }
+.clip { position: relative; border-radius: 3px; }
+.clip.f { background: color-mix(in srgb, var(--front) 78%, #000); }
+.clip.r { background: color-mix(in srgb, var(--rear) 78%, #000); }
+.clip .gaph {
+  position: absolute; top: 0; bottom: 0; border-radius: 2px;
+  background: repeating-linear-gradient(135deg, #2b2d31 0 4px, #1b1c1f 4px 8px); box-shadow: inset 0 0 0 1px var(--warn);
+}
+.lane-chart { position: relative; }
+.lane-chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.spd-area { fill: rgba(236, 234, 228, .09); }
+.spd-line { fill: none; stroke: var(--fg-2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.alt-area { fill: rgba(143, 163, 191, .12); }
+.alt-line { fill: none; stroke: #8fa3bf; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.lane-chart.spd { border-bottom: 1px dashed var(--line); }
+.maxdot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--max); box-shadow: 0 0 0 2px var(--panel); }
+.maxlbl { position: absolute; transform: translate(9px, -50%); font-size: 12px; color: var(--fg); white-space: nowrap; pointer-events: none; background: var(--panel); padding: 0 4px; border-radius: 3px; }
+.band { position: absolute; top: 46px; bottom: 0; background: repeating-linear-gradient(135deg, rgba(139, 143, 152, .22) 0 3px, transparent 3px 7px); pointer-events: none; min-width: 3px; }
+.pin {
+  position: absolute; top: 0; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 5px 0 3px;
+  border: 0; border-radius: 3px; background: var(--panel-2); color: var(--fg-2); font-size: 11px; cursor: pointer; white-space: nowrap; z-index: 3;
+}
+.pin .i { width: 14px; height: 14px; }
+.ruler .pin { height: 18px; }
+.pin[data-type=max] { color: var(--max); }
+.pin[data-type=gap] { color: var(--warn); }
+.pin:hover { background: var(--raise); color: var(--fg); }
+.pin.compact .t { display: none; }
+.sel { position: absolute; top: 18px; bottom: 0; background: var(--amber-wash); box-shadow: inset 1px 0 0 var(--amber), inset -1px 0 0 var(--amber); pointer-events: none; z-index: 1; }
+.sel[hidden] { display: none; }
+.sel-bar { position: absolute; left: 0; right: 0; top: 18px; height: 6px; background: rgba(255, 178, 62, .55); pointer-events: auto; cursor: grab; }
+.sel-h { position: absolute; top: 18px; width: 12px; height: 24px; pointer-events: auto; cursor: ew-resize; border: 0; padding: 0; background: none; z-index: 4; }
+.sel-h::after { content: ''; position: absolute; top: 0; width: 6px; height: 24px; background: var(--amber); }
+.sel-h.a { left: -6px; } .sel-h.a::after { left: 6px; border-radius: 3px 0 0 3px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+.sel-h.b { right: -6px; } .sel-h.b::after { left: 0; border-radius: 0 3px 3px 0; }
+.playhead { position: absolute; top: 18px; bottom: -4px; width: 0; z-index: 5; pointer-events: none; }
+.playhead::before { content: ''; position: absolute; left: -1px; top: 10px; bottom: 0; width: 2px; background: var(--amber); }
+.playhead::after { content: ''; position: absolute; left: -7px; top: 0; border: 7px solid transparent; border-top: 10px solid var(--amber); border-bottom: 0; }
+.rearhead { position: absolute; width: 2px; background: var(--rear); z-index: 4; pointer-events: none; display: none; }
+.unlinked .rearhead { display: block; }
+.hoverline { position: absolute; top: 40px; bottom: 0; width: 1px; background: rgba(236, 234, 228, .35); pointer-events: none; display: none; z-index: 4; }
+.hovertip { position: absolute; top: -4px; transform: translateX(-50%); padding: 3px 7px; border-radius: 3px; background: var(--raise); font-size: 12px; white-space: nowrap; pointer-events: none; display: none; z-index: 6; box-shadow: var(--float-shadow); }
+
+.toast {
+  position: fixed; z-index: 90; top: 62px; left: 50%; transform: translate(-50%, -8px); padding: 9px 14px; border-radius: var(--r-ctl);
+  background: var(--fg); color: var(--app); font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.kbd-pop { right: 0; bottom: calc(100% + 6px); top: auto; width: 280px; padding: 12px; }
+.kbd-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+.kbd-pop dt { color: var(--fg); } .kbd-pop dd { margin: 0; color: var(--fg-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .playing .fr.on { animation: none; }
+  .fr, .minimap, .toast, .tip { transition: none; }
+}
+
+/* ---------- celular ---------- */
+@media (max-width: 760px) {
+  .app { height: auto; display: flex; flex-direction: column; gap: 0; padding-bottom: 24px; }
+  .stage { display: contents; }
+  .top { order: 0; } .viewer { order: 1; } .transport { order: 2; } .timeline { order: 3; } .minimap { order: 4; } .inspector { order: 5; }
+  .cam.pip .camtag .l { display: none; } .cam.pip .camtag .s { display: inline; } .cam.pip .camtag { top: 4px; left: 4px; }
+  .top { height: 56px; gap: 8px; }
+  .brand span, .sep, .top .pill .lbl { display: none; }
+  .top .pill { padding: 0 8px; }
+  .trip-btn { flex: 1; justify-content: space-between; }
+  .trip-btn span { font-size: 13px; }
+  .trips-pop { width: calc(100vw - 32px); }
+  .viewer { aspect-ratio: 16 / 9; width: 100%; height: auto; }
+  .screen.split { width: min(100cqw, calc(100cqh * 32 / 9)); }
+  .cam.main .camtag, .screen.split .cam .camtag { top: 44px; left: 8px; }
+  .viewctl { top: 8px; left: 8px; }
+  .seg button { height: 28px; padding: 0 7px; }
+  .viewctl .seg button .lbl { display: none; }
+  .hud { left: 8px; bottom: 8px; gap: 10px; padding: 5px 8px 6px; }
+  .hud .clk { font-size: 20px; } .hud .v b { font-size: 17px; } .hud .v.alt { display: none; }
+  .cam.pip { width: 30%; inset: auto 8px 8px auto; }
+  .minimap, .minimap.big { position: relative; top: auto; right: auto; width: 100%; height: 200px; margin-top: 8px; }
+  .minimap .expand { display: none; }
+  .transport { margin-top: 8px; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; padding: 8px 10px; }
+  .now { grid-column: 1; grid-row: 1; gap: 8px; }
+  .now .clk { font-size: 24px; }
+  .now .el { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .tright { grid-column: 2; grid-row: 1; gap: 0; }
+  .tright .ghost { padding: 0 6px; }
+  .tc { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
+  .tright .ghost .lbl, .tright .kb { display: none; }
+  .rate { margin-left: 4px; }
+  .timeline { margin-top: 8px; grid-template-columns: 58px minmax(0, 1fr); padding-right: 12px; }
+  .gutter div { padding-left: 8px; font-size: 11px; }
+  .gutter .long { display: none; }
+  .pin .t { display: none; }
+  .inspector { margin-top: 8px; overflow: visible; }
+}
+@media (max-width: 380px) { .tbtn { width: 34px; height: 34px; } .rate.seg button { padding: 0 6px; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="3" fill="#2a2d32"/><path d="M12 7v3M12 13v4" stroke="#ffb23e" stroke-width="2" stroke-linecap="round"/><path d="M7 20 10 4M17 20 14 4" stroke="#7b7e86" stroke-width="1.4"/></svg>
+      <span>Estúdio de viagem</span>
+    </div>
+    <div class="sep"></div>
+    <div style="position:relative; min-width:0; display:flex">
+      <button class="btn trip-btn" id="tripBtn" aria-haspopup="menu" aria-controls="tripPop">
+        <b id="tripBtnDay">Sábado, 21 nov</b><span id="tripBtnTime">09:03 – 11:54</span><svg class="i"><use href="#i-chev"/></svg>
+      </button>
+      <div class="pop trips-pop" id="tripPop" role="menu" aria-label="Escolher viagem"></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="tipwrap">
+      <button class="pill" id="syncPill" aria-describedby="syncTip"><svg class="i"><use href="#i-check"/></svg><span class="lbl">Vídeo e GPS alinhados</span></button>
+      <div class="tip" role="tooltip" id="syncTip"></div>
+    </div>
+    <div style="position:relative">
+      <button class="btn iconbtn" id="moreBtn" aria-haspopup="menu" aria-controls="morePop" aria-label="Mais ações"><svg class="i"><use href="#i-more"/></svg></button>
+      <div class="pop more-pop" id="morePop" role="menu" aria-label="Mais ações">
+        <button class="mi" role="menuitem" data-act="copy" data-close><svg class="i"><use href="#i-copy"/></svg>Copiar coordenada deste ponto</button>
+        <div class="mi-sep" role="separator"></div>
+        <button class="mi" role="menuitem" data-act="gpx-all" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>GPX</small></button>
+        <button class="mi" role="menuitem" data-act="kml-all" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>KML</small></button>
+        <div class="mi-sep" role="separator"></div>
+        <button class="mi" role="menuitem" data-act="tech" data-close><svg class="i"><use href="#i-info"/></svg>Detalhes técnicos</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="viewer" id="viewer" aria-label="Vídeos das câmeras">
+      <div class="screen" id="screen">
+        <div class="cam main" data-cam="front" id="camFront">
+          <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+          <span class="camtag"><i style="background:var(--front)"></i><span class="l">Câmera dianteira</span><span class="s">Frente</span></span>
+          <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação desta câmera neste trecho</div>
+          <span class="held"></span>
+        </div>
+        <div class="cam pip" data-cam="rear" id="camRear" role="button" tabindex="0" aria-label="Câmera traseira. Clique para trocar com a dianteira">
+          <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+          <span class="camtag"><i style="background:var(--rear)"></i><span class="l">Câmera traseira</span><span class="s">Trás</span></span>
+          <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação traseira neste trecho</div>
+          <span class="held"></span>
+        </div>
+        <div class="hud cond" aria-hidden="true">
+          <div class="clk" id="hudClock">10:03:02</div>
+          <div class="v spd"><b id="hudSpeed">58</b><small>km/h</small></div>
+          <div class="v alt"><b id="hudAlt">176</b><small>m de altitude</small></div>
+          <div class="v alt"><b id="hudHead">Oeste</b><small>sentido</small></div>
+        </div>
+      </div>
+      <div class="viewctl">
+        <div class="seg" role="group" aria-label="Arranjo das câmeras">
+          <button id="modePip" aria-pressed="true" title="Traseira em miniatura"><svg class="i"><use href="#i-pip"/></svg><span class="lbl">Miniatura</span></button>
+          <button id="modeSplit" aria-pressed="false" title="Frente e trás lado a lado"><svg class="i"><use href="#i-split"/></svg><span class="lbl">Lado a lado</span></button>
+        </div>
+        <div class="seg"><button id="swapBtn" aria-pressed="false" title="Trocar câmeras"><svg class="i"><use href="#i-swap"/></svg><span class="sr">Trocar câmera principal</span></button></div>
+      </div>
+    </section>
+
+    <div class="minimap" id="minimap">
+      <svg class="map" id="mapSvg" role="img" aria-label="Mapa da viagem. Clique para ir a um ponto." preserveAspectRatio="none"></svg>
+      <div class="mapctl">
+        <button id="followBtn" aria-pressed="false" title="Seguir o veículo"><svg class="i"><use href="#i-target"/></svg><span class="sr">Seguir o veículo</span></button>
+        <button id="fitBtn" title="Ver a rota inteira"><svg class="i"><use href="#i-route"/></svg><span class="sr">Ver a rota inteira</span></button>
+        <button id="bigBtn" class="expand" aria-pressed="false" title="Ampliar mapa (M)"><svg class="i"><use href="#i-expand"/></svg><span class="sr">Ampliar mapa</span></button>
+      </div>
+      <div class="coordchip" id="coordChip" role="status"><span id="coordText"></span><button id="coordCopy"><svg class="i"><use href="#i-copy"/></svg>Copiar</button></div>
+    </div>
+
+    <aside class="inspector" aria-label="Sobre esta viagem">
+      <section>
+        <div class="trip-day" id="tripDay"></div>
+        <div class="trip-time cond" id="tripTime"></div>
+        <div class="stats" id="stats"></div>
+      </section>
+      <section class="selbox" id="selBox" aria-live="polite"></section>
+      <section>
+        <h2>Marcos da viagem</h2>
+        <ul class="marks" id="marks"></ul>
+      </section>
+      <details class="tech" id="tech">
+        <summary><svg class="i"><use href="#i-chevR"/></svg>Detalhes técnicos</summary>
+        <dl id="techList"></dl>
+      </details>
+      <p class="proto">Protótipo — dados de exemplo da viagem de 21/11. Reprodução acelerada 60× para demonstração; quadros ilustrativos.</p>
+    </aside>
+  </main>
+
+  <section class="transport" aria-label="Controle de reprodução">
+    <div class="now">
+      <span class="clk cond" id="clock" aria-live="off">10:03:02</span>
+      <span class="el" id="elapsed">1:00:02 de 2:51:31</span>
+    </div>
+    <div class="tc">
+      <button class="tbtn" id="backBtn" title="Voltar 10 s (←)"><svg class="i"><use href="#i-back10"/></svg><span class="sr">Voltar 10 segundos</span></button>
+      <button class="tbtn play" id="playBtn" title="Reproduzir (espaço)"><svg class="i" id="playIco"><use href="#i-play"/></svg><span class="sr" id="playLbl">Reproduzir</span></button>
+      <button class="tbtn" id="fwdBtn" title="Avançar 10 s (→)"><svg class="i"><use href="#i-fwd10"/></svg><span class="sr">Avançar 10 segundos</span></button>
+      <div class="seg rate" role="group" aria-label="Velocidade de reprodução">
+        <button data-rate="1" aria-pressed="true">1×</button><button data-rate="2" aria-pressed="false">2×</button><button data-rate="4" aria-pressed="false">4×</button>
+      </div>
+    </div>
+    <div class="tright">
+      <button class="ghost" id="inBtn" title="Marcar início do trecho (I)"><svg class="i"><use href="#i-markIn"/></svg><span class="lbl">Início</span></button>
+      <button class="ghost" id="outBtn" title="Marcar fim do trecho (O)"><svg class="i"><use href="#i-markOut"/></svg><span class="lbl">Fim</span></button>
+      <button class="ghost" id="linkBtn" aria-pressed="true" title="Câmeras sincronizadas: play, pausa e saltos valem para as duas. Clique para soltar a traseira."><svg class="i" id="linkIco"><use href="#i-link"/></svg><span class="lbl" id="linkLbl">Sincronizadas</span></button>
+      <div style="position:relative" class="kb">
+        <button class="ghost" id="kbBtn" aria-haspopup="dialog" aria-controls="kbPop" title="Atalhos de teclado"><svg class="i"><use href="#i-keyboard"/></svg><span class="sr">Atalhos de teclado</span></button>
+        <div class="pop kbd-pop" id="kbPop" role="dialog" aria-label="Atalhos de teclado">
+          <dl><dt>Espaço ou K</dt><dd>Reproduzir ou pausar</dd><dt>← →</dt><dd>Voltar ou avançar 10 s</dd><dt>Shift + ← →</dt><dd>Voltar ou avançar 1 min</dd><dt>I e O</dt><dd>Marcar início e fim do trecho</dd><dt>M</dt><dd>Ampliar o mapa</dd><dt>C</dt><dd>Trocar câmera principal</dd></dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="timeline" aria-label="Linha do tempo">
+    <div class="gutter" aria-hidden="true">
+      <div>Horário</div>
+      <div><i style="background:var(--front)"></i>Frente</div>
+      <div><i style="background:var(--rear)"></i>Trás</div>
+      <div>km/h<span class="long">&nbsp;velocidade</span></div>
+      <div>m<span class="long">&nbsp;altitude</span></div>
+    </div>
+    <div class="lanes" id="lanes" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="100" aria-valuenow="35">
+      <div class="ruler" id="ruler"></div>
+      <div class="clip f" id="clipF"></div>
+      <div class="clip r" id="clipR"></div>
+      <div class="lane-chart spd" id="laneSpd"><svg viewBox="0 0 1000 58" preserveAspectRatio="none" aria-hidden="true"><path class="spd-area" id="spdArea"/><path class="spd-line" id="spdLine"/></svg></div>
+      <div class="lane-chart alt" id="laneAlt"><svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true"><path class="alt-area" id="altArea"/><path class="alt-line" id="altLine"/></svg></div>
+      <div id="overlay"></div>
+      <div class="sel" id="sel" hidden><div class="sel-bar" id="selBar" title="Arraste para mover o trecho"></div><button class="sel-h a" id="selA" aria-label="Início do trecho"></button><button class="sel-h b" id="selB" aria-label="Fim do trecho"></button></div>
+      <div class="rearhead" id="rearHead"></div>
+      <div class="playhead" id="playhead"></div>
+      <div class="hoverline" id="hoverLine"></div>
+      <div class="hovertip" id="hoverTip"></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="mock-data.js"></script>
+<script src="proto-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const P = window.Proto; P.injectIcons();
+  const $ = (id) => document.getElementById(id);
+  const app = $('app'), player = P.player();
+  const NS = 'http://www.w3.org/2000/svg';
+  let rearHold = null, swapped = false, lastIdx = -1, lastMark = '';
+
+  /* ---------- mini-mapa ---------- */
+  const svg = $('mapSvg');
+  const mv = P.mapView(svg, player.s.trip, () => ({l: 18, r: 18, t: 34, b: 18}));
+  function buildMap(t) {
+    const S = P.scenery(t);
+    const parks = S.parks.map((d) => `<path d="${d}" fill="#24302a"/>`).join('');
+    const towns = S.towns.map((w) => `<path d="${w.d}" stroke="#272a2f" stroke-width=".7" vector-effect="non-scaling-stroke"/>`).join('');
+    svg.innerHTML = `
+      <rect x="-5000" y="-5000" width="11000" height="11000" fill="#1e2125"/>
+      ${parks}
+      ${S.water.map((d) => `<path d="${d}" fill="#18242e"/>`).join('')}
+      ${S.land.map((d) => `<path d="${d}" fill="#1e2125"/>`).join('')}
+      ${S.waterLines.map((d) => `<path d="${d}" fill="none" stroke="#1d2e3b" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`).join('')}
+      <g fill="none">${towns}
+        ${S.minor.map((d) => `<path d="${d}" stroke="#2f3338" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('')}
+        ${S.major.map((d) => `<path d="${d}" stroke="#3a3e45" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('')}
+        ${S.bridges.map((d) => `<path d="${d}" stroke="#3a3e45" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('')}
+        <path d="${P.line(t.route)}" stroke="#5d6169" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+        <path id="mSel" stroke="#ffb23e" stroke-opacity=".45" stroke-width="9" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="mDone" stroke="#eceae4" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+      </g>
+      <g id="mStops"></g>
+      <g id="mCar"><circle r="11" fill="#ffb23e" fill-opacity=".22"/><path d="M-6 -5.5 8 0 -6 5.5 -3 0z" fill="#ffb23e" stroke="#000" stroke-width="1"/></g>`;
+    $('mStops').innerHTML = t.marks.filter((m) => m.type === 'stop').map((m) => { const p = P.pos(t, m.f); return `<g class="mstop" data-x="${p.x}" data-y="${p.y}"><rect x="-7" y="-7" width="14" height="14" rx="3" fill="#2a2d32" stroke="#8b8f98"/><text y="4" text-anchor="middle" font-size="10" font-weight="700" fill="#eceae4" font-family="Barlow, sans-serif">P</text></g>`; }).join('');
+    lastIdx = -1;
+  }
+  function placeStops() {
+    const k = mv.unitsPerPx();
+    svg.querySelectorAll('.mstop').forEach((g) => g.setAttribute('transform', `translate(${g.dataset.x} ${g.dataset.y}) scale(${k})`));
+  }
+  mv.onchange = placeStops;
+  mv.interactive((x, y) => {
+    const t = player.s.trip, hit = P.nearest(t, x, y);
+    player.seek(hit.f);
+    showCoord(hit.f);
+  });
+  function showCoord(f) {
+    const c = P.coord(player.s.trip, f);
+    $('coordText').textContent = c.text; $('coordChip').classList.add('show'); $('coordChip').dataset.text = c.text;
+  }
+  $('coordCopy').addEventListener('click', () => copyCoord($('coordChip').dataset.text));
+  function copyCoord(text) { P.copy(text).then((ok) => P.toast($('toast'), ok ? `Coordenada copiada: ${text}` : 'Não foi possível copiar. Selecione o texto e copie manualmente.')); }
+  $('followBtn').addEventListener('click', () => { const v = !mv.following; mv.follow(v); $('followBtn').setAttribute('aria-pressed', v); if (v) { mv.fit(); mv.zoom(3.2); renderTime(player.s); } });
+  $('fitBtn').addEventListener('click', () => { mv.follow(false); $('followBtn').setAttribute('aria-pressed', 'false'); mv.fit(); });
+  function toggleBig() { const on = !$('minimap').classList.contains('big'); $('minimap').classList.toggle('big', on); $('bigBtn').setAttribute('aria-pressed', on); $('bigBtn').querySelector('use').setAttribute('href', on ? '#i-collapse' : '#i-expand'); setTimeout(() => mv.fit(), P.reduced ? 0 : 260); }
+  $('bigBtn').addEventListener('click', toggleBig);
+
+  /* ---------- lista de viagens ---------- */
+  function buildTripMenu() {
+    const byDay = {};
+    P.trips.forEach((t) => (byDay[t.dayLong] = byDay[t.dayLong] || []).push(t));
+    $('tripPop').innerHTML = Object.entries(byDay).map(([day, list]) => `<h3>${P.cap(day)}</h3>` + list.map((t) => {
+      const th = P.renderThumb(t, 72, 44, 6), sy = P.syncText(t);
+      return `<button class="mi trip-mi" role="menuitem" data-trip="${t.index}" data-close aria-current="${t.index === player.s.trip.index}">
+        <svg class="thumb" viewBox="0 0 72 44" aria-hidden="true"><path d="${th.d}" fill="none" stroke="#a9abb2" stroke-width="1.4" stroke-linejoin="round"/><circle cx="${th.b[0]}" cy="${th.b[1]}" r="2.4" fill="#ffb23e"/></svg>
+        <span class="tm"><b>${P.clock(t, 0, false)} – ${P.clock(t, 1, false)}</b><span>${P.num(t.distance_km, 0)} km em ${P.dur(t.duration_min)}</span>
+        <span>${t.night ? `<span class="badge">${P.icon('moon')}Noite</span> ` : ''}${sy.state === 'warn' ? `<span class="badge warn">${P.icon('warn')}${sy.label}</span>` : ''}</span></span></button>`;
+    }).join('')).join('');
+  }
+  P.popover($('tripBtn'), $('tripPop'), buildTripMenu);
+  $('tripPop').addEventListener('click', (e) => { const b = e.target.closest('[data-trip]'); if (b) player.setTrip(+b.dataset.trip); });
+
+  /* ---------- menu ⋯ ---------- */
+  P.popover($('moreBtn'), $('morePop'));
+  $('morePop').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const t = player.s.trip, a = b.dataset.act;
+    if (a === 'copy') copyCoord(P.coord(t, player.s.f).text);
+    if (a === 'gpx-all' || a === 'kml-all') P.toast($('toast'), `Exportado ${P.exportName(t, null, a.slice(0, 3))} (só o traçado)`);
+    if (a === 'tech') { $('tech').open = true; $('tech').scrollIntoView({block: 'nearest', behavior: P.reduced ? 'auto' : 'smooth'}); $('tech').querySelector('summary').focus({preventScroll: true}); }
+  });
+  P.popover($('kbBtn'), $('kbPop'));
+
+  /* ---------- câmeras ---------- */
+  function setMode(split) {
+    $('screen').classList.toggle('split', split);
+    $('modePip').setAttribute('aria-pressed', !split); $('modeSplit').setAttribute('aria-pressed', split);
+    $('camRear').toggleAttribute('tabindex', !split);
+  }
+  $('modePip').addEventListener('click', () => setMode(false));
+  $('modeSplit').addEventListener('click', () => setMode(true));
+  function swap() {
+    swapped = !swapped;
+    const main = swapped ? $('camRear') : $('camFront'), small = swapped ? $('camFront') : $('camRear');
+    main.classList.add('main'); main.classList.remove('pip'); main.removeAttribute('role'); main.removeAttribute('tabindex'); main.removeAttribute('aria-label');
+    small.classList.add('pip'); small.classList.remove('main'); small.setAttribute('role', 'button'); small.setAttribute('tabindex', '0');
+    small.setAttribute('aria-label', (small === $('camRear') ? 'Câmera traseira' : 'Câmera dianteira') + '. Clique para tornar principal');
+    $('screen').insertBefore(main, $('screen').firstChild);
+    $('swapBtn').setAttribute('aria-pressed', swapped);
+  }
+  $('swapBtn').addEventListener('click', swap);
+  [$('camFront'), $('camRear')].forEach((c) => {
+    c.addEventListener('click', () => { if (c.classList.contains('pip') && !$('screen').classList.contains('split')) swap(); });
+    c.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && c.classList.contains('pip')) { e.preventDefault(); e.stopPropagation(); swap(); } });
+  });
+
+  /* ---------- transporte ---------- */
+  $('playBtn').addEventListener('click', () => player.toggle());
+  $('backBtn').addEventListener('click', () => player.nudge(-10));
+  $('fwdBtn').addEventListener('click', () => player.nudge(10));
+  document.querySelectorAll('[data-rate]').forEach((b) => b.addEventListener('click', () => player.setRate(+b.dataset.rate)));
+  $('inBtn').addEventListener('click', () => player.markIn());
+  $('outBtn').addEventListener('click', () => player.markOut());
+  $('linkBtn').addEventListener('click', () => { const v = !player.s.linked; rearHold = v ? null : player.s.f; player.setLinked(v); });
+  P.keys(player, (e) => {
+    if (e.key === 'm' || e.key === 'M') toggleBig();
+    if (e.key === 'c' || e.key === 'C') swap();
+  });
+
+  /* ---------- linha do tempo ---------- */
+  const lanes = $('lanes');
+  P.scrub(lanes, player, '.sel-h, .sel-bar, .pin');
+  $('clipR').addEventListener('pointerdown', (e) => {
+    if (player.s.linked) return;
+    e.stopPropagation(); rearHold = P.fracFrom(lanes, e.clientX); renderTime(player.s);
+  });
+  P.dragSel($('selA'), lanes, player, 'a'); P.dragSel($('selB'), lanes, player, 'b'); P.dragSel($('selBar'), lanes, player, 'body');
+  P.hover(lanes, (f) => {
+    const hl = $('hoverLine'), tip = $('hoverTip');
+    if (f === null) { hl.style.display = tip.style.display = 'none'; return; }
+    const t = player.s.trip;
+    hl.style.display = tip.style.display = 'block'; hl.style.left = tip.style.left = (f * 100) + '%';
+    tip.textContent = `${P.clock(t, f)}   ${P.num(P.val(t.speed, f), 0)} km/h   ${P.num(P.val(t.altitude, f), 0)} m`;
+  });
+  function layoutRuler(t) {
+    const w = lanes.clientWidth || 800, steps = [5, 10, 15, 30, 60, 120];
+    const step = (steps.find((m) => w / (t.elapsed_s / (m * 60)) >= 70) || 120) * 60;
+    let html = '';
+    for (let s = Math.ceil(t.start / step) * step; s <= t.end; s += step) {
+      const l = (s - t.start) / t.elapsed_s * 100;
+      html += `<div class="tick maj" style="left:${l}%"><span>${P.clockOf(s, false)}</span></div>`;
+      for (let q = 1; q < 3; q++) { const ls = l + (step / 3 * q) / t.elapsed_s * 100; if (ls < 100) html += `<div class="tick" style="left:${ls}%"></div>`; }
+    }
+    html += t.marks.filter((m) => ['stop', 'max', 'gap', 'climb', 'descent'].includes(m.type)).map((m) =>
+      `<button class="pin" data-type="${m.type}" data-f="${m.f}" style="left:${m.f * 100}%;${m.f < .05 ? 'transform:translateX(-8%);' : m.f > .95 ? 'transform:translateX(-92%);' : ''}" title="${m.label} às ${P.clock(m.trip || t, m.f, false)}" aria-label="${m.label}, às ${P.clock(t, m.f, false)}">${P.icon(P.markIcon[m.type])}<span class="t">${m.type === 'stop' ? P.num(Math.round(m.minutes)) + ' min' : m.type === 'max' ? P.num(Math.round(t.max_speed)) : m.type === 'gap' ? 'sem vídeo' : (m.type === 'climb' ? '+' : '−') + P.num(Math.round(m.meters / 10) * 10) + ' m'}</span></button>`).join('');
+    $('ruler').innerHTML = html;
+    $('ruler').querySelectorAll('.pin').forEach((b) => b.addEventListener('click', () => player.seek(+b.dataset.f)));
+    P.declutter($('ruler'));
+  }
+  new ResizeObserver(() => layoutRuler(player.s.trip)).observe(lanes);
+  if (document.fonts) document.fonts.ready.then(() => P.declutter($('ruler')));
+
+  /* ---------- render ---------- */
+  function renderStatic(t) {
+    $('tripBtnDay').textContent = `${P.cap(t.weekday)}, ${t.dayShort}`;
+    $('tripBtnTime').textContent = `${P.clock(t, 0, false)} – ${P.clock(t, 1, false)}`;
+    $('tripDay').textContent = P.cap(t.dayLong);
+    $('tripTime').textContent = `${P.clock(t, 0, false)} – ${P.clock(t, 1, false)}`;
+    $('stats').innerHTML = [
+      [P.num(t.distance_km, 1), 'km', 'distância'], [P.dur(t.duration_min).replace(' min', ''), t.duration_min >= 60 ? 'min' : 'min', 'duração'],
+      [P.num(Math.round(t.max_speed)), 'km/h', 'velocidade máxima'], [P.num(Math.round(t.avg_speed)), 'km/h', 'média'],
+    ].map(([v, u, l]) => `<div class="stat"><b>${v}<small>${u}</small></b><span>${l}</span></div>`).join('');
+    $('marks').innerHTML = t.marks.map((m, i) => `<li data-type="${m.type}" data-i="${i}"><button data-f="${m.f}">${P.icon(P.markIcon[m.type])}<span>${m.label}</span><time>${P.clock(t, m.f, false)}</time></button></li>`).join('');
+    $('marks').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => player.seek(+b.dataset.f)));
+    const sy = P.syncText(t);
+    $('syncPill').dataset.state = sy.state; $('syncPill').querySelector('.lbl').textContent = sy.label;
+    $('syncPill').querySelector('use').setAttribute('href', sy.state === 'ok' ? '#i-check' : '#i-warn');
+    $('syncPill').setAttribute('aria-label', sy.label);
+    $('syncTip').textContent = sy.tip;
+    const vid = t.video_duration_s;
+    $('techList').innerHTML = `<dt>Vídeo dianteiro</dt><dd>${t.files.front}</dd><dt>Vídeo traseiro</dt><dd>${t.files.rear}</dd>
+      <dt>Duração do vídeo</dt><dd>${P.hms(vid)} de ${P.hms(t.elapsed_s)} de GPS (${P.num(vid / t.elapsed_s * 100, 0)}%)</dd>
+      <dt>Pontos GPS</dt><dd>${P.num(t.gpsPoints)} registros</dd><dt>Sincronização</dt><dd>${t.sync.status}, confiança ${t.sync.confidence === 'high' ? 'alta' : t.sync.confidence}</dd>
+      <dt>Importação</dt><dd>153 arquivos traseiros e 153 dianteiros unidos</dd>`;
+    const sp = P.seriesPath(t.speed, 1000, 58, 0, Math.max(140, t.max_speed), 4);
+    $('spdArea').setAttribute('d', sp.area); $('spdLine').setAttribute('d', sp.line);
+    const lo = Math.min(...t.altitude), hi = Math.max(...t.altitude);
+    const ap = P.seriesPath(t.altitude, 1000, 34, lo - (hi - lo) * .05, hi, 2);
+    $('altArea').setAttribute('d', ap.area); $('altLine').setAttribute('d', ap.line);
+    const maxY = 4 + 54 * (1 - t.max_speed / Math.max(140, t.max_speed));
+    $('overlay').innerHTML =
+      t.marks.filter((m) => m.type === 'stop').map((m) => `<div class="band" style="left:${m.f * 100}%;width:${(m.to - m.f) * 100}%"></div>`).join('') +
+      `<div class="maxdot" style="left:${t.max_speed_at * 100}%;top:${40 + 5 + 16 + 5 + 16 + 5 + 2 + maxY}px"></div>` +
+      `<div class="maxlbl" style="left:${t.max_speed_at * 100}%;top:${40 + 5 + 16 + 5 + 16 + 5 + 2 + maxY}px">${P.num(Math.round(t.max_speed))} km/h</div>`;
+    $('clipF').innerHTML = (t.gaps.front || []).map((g) => `<div class="gaph" style="left:${g.from * 100}%;width:${(g.to - g.from) * 100}%" title="Sem vídeo dianteiro"></div>`).join('');
+    $('clipR').innerHTML = (t.gaps.rear || []).map((g) => `<div class="gaph" style="left:${g.from * 100}%;width:${(g.to - g.from) * 100}%" title="Sem vídeo traseiro${g.example ? ' (exemplo)' : ''}"></div>`).join('');
+    ['camFront', 'camRear'].forEach((id) => $(id).classList.toggle('night', t.night));
+    layoutRuler(t);
+    buildMap(t); mv.setTrip(t); placeStops();
+    $('coordChip').classList.remove('show');
+  }
+  function renderSel(s) {
+    const t = s.trip, sel = s.sel, box = $('selBox');
+    if (!sel) {
+      $('sel').hidden = true; $('mSel').setAttribute('d', '');
+      box.innerHTML = `<h2>Trecho</h2><p class="note">Marque início e fim com I e O, ou crie um trecho a partir deste ponto, e ajuste arrastando as alças âmbar na linha do tempo.</p>
+        <div class="row"><button class="btn small" id="selNew">${P.icon('markIn')}Selecionar trecho aqui</button></div>`;
+      $('selNew').addEventListener('click', () => player.setSel({a: s.f, b: Math.min(1, s.f + 0.06)}));
+      return;
+    }
+    const info = P.selInfo(t, sel);
+    $('sel').hidden = false; $('sel').style.left = sel.a * 100 + '%'; $('sel').style.width = (sel.b - sel.a) * 100 + '%';
+    $('selA').setAttribute('aria-valuetext', info.from); $('selB').setAttribute('aria-valuetext', info.to);
+    $('mSel').setAttribute('d', P.line(P.routeSlice(t, sel.a, sel.b)));
+    box.innerHTML = `<h2>Trecho selecionado</h2>
+      <div class="range">${info.from} – ${info.to}</div>
+      <div class="meta">${P.dur(info.min)} e ${P.num(info.km, 1)} km</div>
+      <div class="row">
+        <button class="btn small primary" id="expBtn" aria-haspopup="menu" aria-controls="expPop">${P.icon('download')}Exportar trecho</button>
+        <button class="btn small" id="selPlay">${P.icon('play')}Ver do início</button>
+        <button class="btn small iconbtn" id="selClear" title="Limpar seleção">${P.icon('x')}<span class="sr">Limpar seleção</span></button>
+        <div class="pop" id="expPop" role="menu" aria-label="Formato" style="left:0">
+          <button class="mi" role="menuitem" data-fmt="gpx" data-close>GPX<small>Garmin, Strava, OsmAnd</small></button>
+          <button class="mi" role="menuitem" data-fmt="kml" data-close>KML<small>Google Earth, My Maps</small></button>
+        </div>
+      </div>
+      <p class="note">Exporta só o traçado do trecho. Em outro aplicativo, a rota pode não seguir exatamente as mesmas ruas.</p>`;
+    P.popover($('expBtn'), $('expPop'));
+    $('expPop').addEventListener('click', (e) => { const b = e.target.closest('[data-fmt]'); if (b) P.toast($('toast'), `Trecho exportado: ${P.exportName(t, sel, b.dataset.fmt)}`); });
+    $('selPlay').addEventListener('click', () => { player.seek(sel.a); player.play(); });
+    $('selClear').addEventListener('click', () => player.setSel(null));
+  }
+  function moveSel(s) {
+    if (!s.sel) return renderSel(s);
+    if ($('sel').hidden || !$('expBtn')) return renderSel(s);
+    const info = P.selInfo(s.trip, s.sel);
+    $('sel').style.left = s.sel.a * 100 + '%'; $('sel').style.width = (s.sel.b - s.sel.a) * 100 + '%';
+    $('selBox').querySelector('.range').textContent = `${info.from} – ${info.to}`;
+    $('selBox').querySelector('.meta').textContent = `${P.dur(info.min)} e ${P.num(info.km, 1)} km`;
+    $('mSel').setAttribute('d', P.line(P.routeSlice(s.trip, s.sel.a, s.sel.b)));
+  }
+  function renderState(s) {
+    $('playIco').querySelector('use').setAttribute('href', s.playing ? '#i-pause' : '#i-play');
+    $('playLbl').textContent = s.playing ? 'Pausar' : 'Reproduzir';
+    $('playBtn').title = s.playing ? 'Pausar (espaço)' : 'Reproduzir (espaço)';
+    app.classList.toggle('playing', s.playing);
+    document.querySelectorAll('[data-rate]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.rate === s.rate));
+    $('linkBtn').setAttribute('aria-pressed', s.linked);
+    $('linkIco').querySelector('use').setAttribute('href', s.linked ? '#i-link' : '#i-unlink');
+    $('linkLbl').textContent = s.linked ? 'Sincronizadas' : 'Independentes';
+    $('linkBtn').title = s.linked ? 'Câmeras sincronizadas: play, pausa e saltos valem para as duas. Clique para soltar a traseira.' : 'Câmeras independentes: a traseira fica parada; clique na faixa Trás para posicioná-la. Clique para sincronizar de novo.';
+    app.classList.toggle('unlinked', !s.linked);
+  }
+  function renderTime(s) {
+    const t = s.trip, f = s.f, rf = s.linked || rearHold === null ? f : rearHold;
+    const clk = P.clock(t, f);
+    $('clock').textContent = clk; $('hudClock').textContent = clk;
+    $('elapsed').textContent = `${P.hms(f * t.elapsed_s)} de ${P.hms(t.elapsed_s)}`;
+    const pos = P.pos(t, f);
+    $('hudSpeed').textContent = P.num(P.val(t.speed, f), 0);
+    $('hudAlt').textContent = P.num(P.val(t.altitude, f), 0);
+    $('hudHead').textContent = {N: 'Norte', NE: 'Nordeste', L: 'Leste', SE: 'Sudeste', S: 'Sul', SO: 'Sudoeste', O: 'Oeste', NO: 'Noroeste'}[P.compass(pos.heading)];
+    $('playhead').style.left = f * 100 + '%';
+    $('rearHead').style.left = rf * 100 + '%'; $('rearHead').style.top = '68px'; $('rearHead').style.height = '16px';
+    lanes.setAttribute('aria-valuenow', Math.round(f * 100)); lanes.setAttribute('aria-valuetext', clk);
+    P.frameSwap($('camFront'), P.frameAt(t, f).front);
+    P.frameSwap($('camRear'), P.frameAt(t, rf).rear);
+    $('camFront').classList.toggle('gap', !!P.inGap(t, 'front', f));
+    $('camRear').classList.toggle('gap', !!P.inGap(t, 'rear', rf));
+    $('camRear').querySelector('.held').textContent = `Parada em ${P.clock(t, rf)}`;
+    /* mapa */
+    const k = mv.unitsPerPx();
+    if (mv.following) mv.center(pos.x, pos.y);
+    $('mCar').setAttribute('transform', `translate(${pos.x} ${pos.y}) rotate(${pos.heading}) scale(${k})`);
+    const idx = Math.floor(f * (t.route.length - 1));
+    if (idx !== lastIdx) { lastIdx = idx; $('mDone').setAttribute('d', P.line(P.routeSlice(t, 0, f))); }
+    /* marco atual */
+    let cur = -1; t.marks.forEach((m, i) => { if (m.f <= f + 1e-4) cur = i; });
+    const key = t.id + cur;
+    if (key !== lastMark) { lastMark = key; $('marks').querySelectorAll('li').forEach((li) => li.classList.toggle('now', +li.dataset.i === cur)); }
+  }
+  player.on((s, why) => {
+    if (why === 'init' || why === 'trip') { renderStatic(s.trip); renderSel(s); renderState(s); }
+    if (why === 'sel') moveSel(s);
+    if (why === 'state') renderState(s);
+    renderTime(s);
+  });
+  mv.onchange = () => { placeStops(); const s = player.s, p = P.pos(s.trip, s.f); $('mCar').setAttribute('transform', `translate(${p.x} ${p.y}) rotate(${p.heading}) scale(${mv.unitsPerPx()})`); };
+  requestAnimationFrame(() => { mv.fit(); layoutRuler(player.s.trip); renderTime(player.s); });
+})();
+</script>
+</body>
+</html>
