@@ -251,6 +251,155 @@
         return '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Trecho DDpai</name><LineString><coordinates>' + points.map(p => `${p[1]},${p[0]}`).join(' ') + '</coordinates></LineString></Placemark></Document></kml>';
     }
 
+    const CHAPTER_SAMPLES = 300;
+    const CLIMB_WINDOW_FRACTION = 0.2;
+    const CLIMB_MIN_M = 250;
+    const GAP_MIN_SECONDS = 30;
+
+    function cameraGaps(trip, camera, minSeconds = GAP_MIN_SECONDS) {
+        if (!trip.video_sync || !trip['video_' + camera]) return [];
+        const sync = trip.video_sync[camera];
+        if (!sync) return [];
+
+        const gaps = [];
+        let start = null;
+        for (let i = 0; i < sync.length; i++) {
+            if (sync[i] === null && start === null) {
+                start = i;
+            } else if (sync[i] !== null && start !== null) {
+                // Compute duration from GPS points
+                const duration = elapsedAt(trip, i - 1) - elapsedAt(trip, start);
+                if (duration >= minSeconds) {
+                    gaps.push({startIndex: start, endIndex: i - 1});
+                }
+                start = null;
+            }
+        }
+        if (start !== null) {
+            // Compute duration from GPS points
+            const duration = elapsedAt(trip, sync.length - 1) - elapsedAt(trip, start);
+            if (duration >= minSeconds) {
+                gaps.push({startIndex: start, endIndex: sync.length - 1});
+            }
+        }
+
+        return gaps;
+    }
+
+    function deriveChapters(trip) {
+        const points = trip.points;
+        const n = points.length;
+        if (n === 0) return [];
+
+        const chapters = [
+            {type: 'start', index: 0, title: 'Partida'}
+        ];
+
+        // Stop chapters
+        if (trip.idle_segments) {
+            for (const seg of trip.idle_segments) {
+                chapters.push({
+                    type: 'stop',
+                    index: seg.start_index,
+                    endIndex: seg.end_index,
+                    title: `Parada de ${Math.round(seg.duration_s / 60)} min`
+                });
+            }
+        }
+
+        // Max speed chapter
+        let maxSpeed = -Infinity;
+        let maxIndex = -1;
+        for (let i = 0; i < n; i++) {
+            const speed = points[i][2];
+            if (speed > maxSpeed) {
+                maxSpeed = speed;
+                maxIndex = i;
+            }
+        }
+        if (maxIndex !== -1) {
+            chapters.push({
+                type: 'max',
+                index: maxIndex,
+                title: `Velocidade máxima ${Math.round(maxSpeed)} km/h`
+            });
+        }
+
+        // Climb/descent chapters
+        const altitudes = points.map(p => p[3]);
+        const alt = downsample(altitudes, CHAPTER_SAMPLES, 'mean');
+        const W = Math.round(alt.length * CLIMB_WINDOW_FRACTION);
+        let bestUp = {g: 0}, bestDown = {g: 0};
+        for (let i = 0; i + W < alt.length; i++) {
+            const g = alt[i + W] - alt[i];
+            if (g > bestUp.g) bestUp = {g, i};
+            if (-g > bestDown.g) bestDown = {g: -g, i};
+        }
+        const refine = (b, up) => {
+            let i0 = b.i, i1 = b.i + W;
+            for (let k = b.i; k <= b.i + W; k++) { 
+                if (up ? alt[k] < alt[i0] : alt[k] > alt[i0]) i0 = k; 
+            }
+            i1 = i0; 
+            for (let k = i0; k <= b.i + W; k++) { 
+                if (up ? alt[k] > alt[i1] : alt[k] < alt[i1]) i1 = k; 
+            }
+            return {from: i0, to: i1, m: Math.abs(alt[i1] - alt[i0])};
+        };
+        if (bestUp.g > CLIMB_MIN_M) {
+            const r = refine(bestUp, true);
+            const fromIndex = Math.round(r.from * (n - 1) / (alt.length - 1));
+            const toIndex = Math.round(r.to * (n - 1) / (alt.length - 1));
+            chapters.push({
+                type: 'climb',
+                index: fromIndex,
+                endIndex: toIndex,
+                title: `Subida de ${(Math.round(r.m/10)*10).toLocaleString('pt-BR')} m`,
+                detail: `De ${Math.round(alt[r.from])} m a ${Math.round(alt[r.to])} m`
+            });
+        }
+        if (bestDown.g > CLIMB_MIN_M) {
+            const r = refine(bestDown, false);
+            const fromIndex = Math.round(r.from * (n - 1) / (alt.length - 1));
+            const toIndex = Math.round(r.to * (n - 1) / (alt.length - 1));
+            chapters.push({
+                type: 'descent',
+                index: fromIndex,
+                endIndex: toIndex,
+                title: `Descida de ${(Math.round(r.m/10)*10).toLocaleString('pt-BR')} m`,
+                detail: `De ${Math.round(alt[r.from])} m a ${Math.round(alt[r.to])} m`
+            });
+        }
+
+        // Gap chapters
+        const frontGaps = cameraGaps(trip, 'front', GAP_MIN_SECONDS);
+        for (const gap of frontGaps) {
+            chapters.push({
+                type: 'gap',
+                index: gap.startIndex,
+                endIndex: gap.endIndex,
+                title: 'Sem vídeo dianteiro'
+            });
+        }
+        const rearGaps = cameraGaps(trip, 'rear', GAP_MIN_SECONDS);
+        for (const gap of rearGaps) {
+            chapters.push({
+                type: 'gap',
+                index: gap.startIndex,
+                endIndex: gap.endIndex,
+                title: 'Sem vídeo traseiro'
+            });
+        }
+
+        // End chapter
+        chapters.push({type: 'end', index: n - 1, title: 'Chegada'});
+
+        // Sort by index (stable sort)
+        chapters.sort((a, b) => a.index - b.index);
+
+        return chapters;
+    }
+
     const api = {
         parseUtc,
         elapsedAt,
@@ -264,7 +413,9 @@
         routeThumbPath,
         decimalToDms,
         buildGpx,
-        buildKml
+        buildKml,
+        cameraGaps,
+        deriveChapters
     };
     
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
