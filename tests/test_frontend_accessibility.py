@@ -71,9 +71,11 @@ class TestShell(unittest.TestCase):  # Tarefa 5
         self.assertIn('localStorage', body)
 
     def test_map_uses_themed_tiles_and_controls(self):
-        self.assertIn('basemaps.cartocdn.com', HTML)
-        self.assertIn('light_all', HTML)
-        self.assertIn('dark_all', HTML)
+        # CARTO passou a exigir chave de API: tiles do OSM, com o visual de cada tema feito por filtro CSS.
+        self.assertNotIn('basemaps.cartocdn.com', HTML)
+        self.assertIn('tile.openstreetmap.org', HTML)
+        self.assertGreaterEqual(HTML.count('--tile-filter:'), 3)  # :root + os dois blocos escuros
+        self.assertRegex(HTML, r'\.leaflet-tile-pane\s*\{[^}]*filter:\s*var\(--tile-filter\)')
         for el in ('map-follow', 'map-fit', 'map-expand'):
             self.assertIn(f'id="{el}"', HTML)
 

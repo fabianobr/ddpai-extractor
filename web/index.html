@@ -25,6 +25,7 @@ try { const saved = localStorage.getItem('theme'); if (saved === 'light' || save
   --blue: #1d5fa8; --blue-wash: rgba(29, 95, 168, .12);
   --green: #2f7d4f; --red: #c2381f; --gapc: #8a6a00;
   --shadow: 0 1px 2px rgba(27, 39, 51, .06), 0 8px 24px rgba(27, 39, 51, .08);
+  --tile-filter: saturate(.35) contrast(.95) brightness(1.03);
   --r-card: 16px; --r-media: 12px; --r-ctl: 999px;
   --gut-l: max(16px, env(safe-area-inset-left, 0px)); --gut-r: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -36,6 +37,7 @@ try { const saved = localStorage.getItem('theme'); if (saved === 'light' || save
   --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
   --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+  --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -46,6 +48,7 @@ try { const saved = localStorage.getItem('theme'); if (saved === 'light' || save
     --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
     --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+  --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
   }
 }
 * { box-sizing: border-box; }
@@ -147,6 +150,9 @@ button, input { font: inherit; color: inherit; }
 .mapbtns button[aria-pressed=true] { color: var(--blue); background: var(--blue-wash); box-shadow: inset 0 0 0 2px var(--blue); }
 .mapbtns .i { width: 17px; height: 17px; }
 .leaflet-container { font-family: inherit; }
+.leaflet-tile-pane { filter: var(--tile-filter); }
+.leaflet-control-attribution { background: var(--card); color: var(--ink-2); opacity: .9; }
+.leaflet-control-attribution a { color: var(--blue); }
 .chapters { grid-area: chapters; background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); overflow: auto; padding: 14px 10px 10px 14px; min-height: 0; }
 .chapters h2 { margin: 0 0 6px 4px; font-size: 18px; font-weight: 700; }
 .chlist { list-style: none; margin: 0; padding: 0; position: relative; }
@@ -514,7 +520,7 @@ let timeline = null;         // geometria da linha do tempo desenhada
 let scrubbing = false;
 let routeStart = null, routeEnd = null;
 let routeLatLngs = [];
-let map = null, tileLayer = null, tripLayer = null;
+let map = null, tripLayer = null;
 const mapLayers = {};
 let doneTimer = null, lastDoneDraw = 0;
 const cameraFlags = {front: {}, rear: {}};
@@ -603,10 +609,7 @@ function cssVar(name) {
 
 function applyTheme() {
     $('theme-icon').setAttribute('href', isDark() ? '#i-sun' : '#i-moon');
-    if (map) {
-        updateTileLayer();
-        styleMapLayers();
-    }
+    if (map) styleMapLayers();   // o visual dos tiles segue o token --tile-filter
 }
 
 function toggleTheme() {
@@ -839,21 +842,11 @@ function styleMapLayers() {
     if (mapLayers.selection) mapLayers.selection.setStyle({color: c.blue});
 }
 
-function updateTileLayer() {
-    if (tileLayer) map.removeLayer(tileLayer);
-    const style = isDark() ? 'dark_all' : 'light_all';
-    tileLayer = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`, {
-        subdomains: 'abcd',
-        maxZoom: 20,
-        attribution: '© OpenStreetMap © CARTO'
-    }).addTo(map);
-}
-
 function initMap() {
     map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([-27.5, -48.5], 11);
     L.control.zoom({position: 'topleft', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar'}).addTo(map);
     L.control.attribution({prefix: false, position: 'bottomright'}).addTo(map);
-    updateTileLayer();
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
     map.on('click', event => {
         setMapCoordinate(event.latlng.lat, event.latlng.lng);
         seekToPoint(nearestPointIndex(event.latlng.lat, event.latlng.lng));
