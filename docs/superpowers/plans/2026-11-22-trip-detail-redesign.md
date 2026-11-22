@@ -39,7 +39,7 @@ Python, que chamam Node 22 para o JS.
 
 ---
 
-### Tarefa 0: Branch e documentação de design
+### Task 0: Branch e documentação de design
 
 **Executor:** orquestrador (comandos triviais).
 
@@ -58,7 +58,7 @@ git commit -m "docs(ux): use cases, redesign options and trip detail design"
 
 ---
 
-### Tarefa 1: `trip-model.js` — tempo e formatação
+### Task 1: `trip-model.js` — tempo e formatação
 
 **Executor:** qwen3-coder:30b (Ollama). Se falhar 2×, o Sonnet assume.
 
@@ -169,7 +169,7 @@ cases[group]();
 
 ---
 
-### Tarefa 2: `trip-model.js` — geometria, séries e exportação
+### Task 2: `trip-model.js` — geometria, séries e exportação
 
 **Executor:** qwen3-coder:30b.
 
@@ -224,7 +224,7 @@ cases[group]();
 
 ---
 
-### Tarefa 3: `trip-model.js` — lacunas de câmera e capítulos
+### Task 3: `trip-model.js` — lacunas de câmera e capítulos
 
 **Executor:** qwen3-coder:30b.
 
@@ -292,7 +292,7 @@ cases[group]();
 
 ---
 
-### Tarefa 4: Contrato estático da nova página (testes antes da reescrita)
+### Task 4: Contrato estático da nova página (testes antes da reescrita)
 
 **Executor:** Haiku (transcreve os testes abaixo). Os testes **devem falhar** contra o `index.html` atual.
 
@@ -528,7 +528,7 @@ detalhe e o `:root`) e as funções de `web/index.html` atual que serão portada
 **Interfaces consumidas:** `TripModel.*` (Tarefas 1–3); `linkVideos`, `pointAtVideoTime`, `timeForPoint` e
 `syncConfidenceWarning` de `video-sync.js`; os nomes de função e os IDs da Tarefa 4.
 
-### Tarefa 5: Casca, vídeo e mapa
+### Task 5: Casca, vídeo e mapa
 
 **Files:** Rewrite `web/index.html`.
 
@@ -555,7 +555,7 @@ detalhe e o `:root`) e as funções de `web/index.html` atual que serão portada
 - [ ] **Step 3:** Rodar o comando do Step 1. Esperado: PASS. Rodar também `python3 -m unittest tests.test_frontend_timeline tests.test_player_sync -v`. Esperado: PASS.
 - [ ] **Step 4: Commit** `feat(web): trip detail shell with camera stage, map and chapters`
 
-### Tarefa 6: Barra da história (tempo único)
+### Task 6: Barra da história (tempo único)
 
 **Files:** Modify `web/index.html`.
 
@@ -583,7 +583,7 @@ detalhe e o `:root`) e as funções de `web/index.html` atual que serão portada
 - [ ] **Step 3:** Rodar o comando do Step 1. Esperado: PASS. Rodar também a suíte completa; as falhas restantes devem ser só de `TestSelectionAndQuality`.
 - [ ] **Step 4: Commit** `feat(web): single transport, real-time clock and chapter timeline`
 
-### Tarefa 7: Trecho, coordenada e qualidade dos dados
+### Task 7: Trecho, coordenada e qualidade dos dados
 
 **Files:** Modify `web/index.html`.
 
@@ -603,7 +603,7 @@ detalhe e o `:root`) e as funções de `web/index.html` atual que serão portada
 
 ---
 
-### Tarefa 8: Verificação visual e documentação
+### Task 8: Verificação visual e documentação
 
 **Executor:** Haiku (mecânico). A revisão do branch inteiro fica com o orquestrador (Opus).
 
