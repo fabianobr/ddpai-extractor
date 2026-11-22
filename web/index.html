@@ -137,6 +137,9 @@ button, input { font: inherit; color: inherit; }
 .stage-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 8px; text-align: center; padding: 24px; color: #d9e0e6; background: repeating-linear-gradient(135deg, #141a20 0 14px, #19212a 14px 28px); }
 .stage-empty b { font: 700 24px/1.1 'Familjen Grotesk', system-ui, sans-serif; color: #fff; }
 .stage-empty .i { width: 30px; height: 30px; margin: 0 auto; }
+.stage-play { position: absolute; z-index: 3; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--yellow); color: var(--yellow-ink); cursor: pointer; box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+.stage-play:hover { filter: brightness(1.06); }
+.stage-play .i { width: 34px; height: 34px; margin-left: 3px; }
 .stagectl { position: absolute; z-index: 3; right: 14px; top: 14px; display: flex; gap: 6px; }
 .stagectl button { height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 999px; background: rgba(12, 15, 18, .6); color: #fff; cursor: pointer; font-size: 13.5px; font-weight: 700; backdrop-filter: blur(6px); }
 .stagectl button:hover { background: rgba(12, 15, 18, .8); }
@@ -419,6 +422,7 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
         <b>Viagem sem vídeo</b>
         <span>O mapa, a linha do tempo e os capítulos continuam disponíveis.</span>
       </div>
+      <button type="button" class="stage-play" id="stage-play" aria-label="Reproduzir" title="Reproduzir (espaço)" hidden><svg class="i" aria-hidden="true"><use href="#i-play"/></svg></button>
       <div class="stagectl" id="stagectl">
         <button type="button" id="layout-side" aria-pressed="false" title="Ver frente e trás lado a lado"><svg class="i" aria-hidden="true"><use href="#i-split"/></svg><span class="lbl">Lado a lado</span></button>
         <button type="button" id="camera-swap" title="Trocar câmera principal (C)"><svg class="i" aria-hidden="true"><use href="#i-swap"/></svg><span class="lbl">Trocar</span></button>
@@ -749,10 +753,31 @@ function attachLazyLoadListener(video) {
     video.addEventListener('play', () => ensureVideoLoaded(video));
 }
 
+/* Ao trocar de viagem, descartar o arquivo antigo faz o navegador disparar um `timeupdate` atrasado (posição volta a 0).
+   O `linkVideos` reagiria carregando e posicionando a outra câmera sem ninguém ter pedido. Durante a troca o modo
+   fica "independente" (ele só age no modo sincronizado) e volta ao normal assim que o evento passou ou o usuário age. */
+let videoSwitch = null;
+
+function finishVideoSwitch() {
+    if (!videoSwitch) return;
+    clearTimeout(videoSwitch.timer);
+    syncState.mode = videoSwitch.mode;
+    videoSwitch = null;
+}
+
+function beginVideoSwitch() {
+    if (!videoSwitch) videoSwitch = {mode: syncState.mode, timer: 0};
+    clearTimeout(videoSwitch.timer);
+    videoSwitch.timer = setTimeout(finishVideoSwitch, 500);
+    syncState.mode = 'independent';
+}
+
 function loadTripVideos(trip) {
+    beginVideoSwitch();
     CAMERAS.forEach(camera => {
         const video = cameraVideo(camera);
         // Cancelar sem `src = ''`: isso dispara erro de mídia. Remover o atributo e recarregar é silencioso.
+        delete video.dataset.lazySrc;
         video.removeAttribute('src');
         video.load();
         if (trip['video_' + camera]) video.dataset.lazySrc = '../' + trip['video_' + camera];
@@ -822,6 +847,7 @@ function updateSyncLock() {
 }
 
 function toggleSyncMode() {
+    finishVideoSwitch();
     syncState.mode = syncState.mode === 'independent' ? 'linked' : 'independent';
     updateSyncLock();
 }
@@ -1002,6 +1028,7 @@ function updatePlayhead(index) {
 /* Navega por índice, para que coordenadas repetidas continuem distinguíveis. */
 function seekToPoint(index) {
     if (!currentTrip || !currentTrip.points[index]) return;
+    finishVideoSwitch();
     const points = currentTrip.points;
     const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
     const defaultTime = points[index].length >= 6 ? points[index][5] : (index / points.length) * gpsDuration;
@@ -1034,9 +1061,11 @@ function updatePlayButton() {
     button.setAttribute('aria-label', label);
     button.title = !anyVideo ? label : `${label} (espaço)`;
     $('play-icon').setAttribute('href', playing ? '#i-pause' : '#i-play');
+    $('stage-play').hidden = !anyVideo || playing;
 }
 
 function togglePlay() {
+    finishVideoSwitch();
     const video = cameraVideo(syncState.activeVideo);
     if (!video.dataset.lazySrc) return;
     if (!video.paused) {
@@ -1066,7 +1095,7 @@ function setRate(rate) {
 
 /* O vídeo da câmera principal comanda a posição; a outra só acompanha pelo `linkVideos`. */
 function onVideoTimeUpdate(event, camera) {
-    if (!currentTrip || scrubbing || syncState.isSyncing || camera !== syncState.activeVideo) return;
+    if (!currentTrip || videoSwitch || scrubbing || syncState.isSyncing || camera !== syncState.activeVideo) return;
     const time = event.target.currentTime;
     const points = currentTrip.points;
     const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
@@ -1090,6 +1119,7 @@ function onVideoTimeUpdate(event, camera) {
 }
 
 function handleShortcut(event) {
+    if (event.defaultPrevented) return;   // outro controle já tratou a tecla
     const target = event.target;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
@@ -1527,10 +1557,12 @@ function wireControls() {
         cam.addEventListener('keydown', event => {
             if (cam.getAttribute('role') !== 'button' || (event.key !== 'Enter' && event.key !== ' ')) return;
             event.preventDefault();
+            event.stopPropagation();   // senão o atalho global também reproduz/pausa
             swapCamera();
         });
     });
     $('sync-lock').addEventListener('click', toggleSyncMode);
+    $('stage-play').addEventListener('click', togglePlay);
     $('play').addEventListener('click', togglePlay);
     $('back10').addEventListener('click', () => nudge(-10));
     $('fwd10').addEventListener('click', () => nudge(10));
@@ -1585,6 +1617,7 @@ async function init() {
     attachLazyLoadListener(cameraVideo('rear'));
     CAMERAS.forEach(camera => {
         const video = cameraVideo(camera);
+        video.addEventListener('click', () => { if (camera === syncState.activeVideo) togglePlay(); });
         video.addEventListener('playing', () => hideLoading(video));
         video.addEventListener('timeupdate', event => onVideoTimeUpdate(event, camera));
         ['play', 'pause', 'ended'].forEach(name => video.addEventListener(name, updatePlayButton));

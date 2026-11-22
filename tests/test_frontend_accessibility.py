@@ -108,10 +108,20 @@ class TestStoryBar(unittest.TestCase):  # Tarefa 6
 
     def test_shortcuts_respect_focus(self):
         body = function_body('handleShortcut')
+        self.assertIn('defaultPrevented', body)
         for token in ('isContentEditable', "'INPUT'", "'BUTTON'", 'preventDefault',
                       "' '", "'k'", "'j'", "'l'", "'i'", "'o'", "'m'", "'c'",
                       "'ArrowLeft'", "'ArrowRight'", "'Escape'"):
             self.assertIn(token, body)
+
+
+class TestReviewFixes(unittest.TestCase):  # correções da revisão das Tarefas 5-7
+    def test_play_overlay_on_stage(self):
+        self.assertRegex(HTML, r'id="stage-play"[^>]*aria-label="Reproduzir"')
+
+    def test_trip_switch_does_not_wake_the_other_camera(self):
+        self.assertIn('beginVideoSwitch(', function_body('loadTripVideos'))
+        self.assertIn('videoSwitch', function_body('onVideoTimeUpdate'))
 
 
 class TestSelectionAndQuality(unittest.TestCase):  # Tarefa 7
