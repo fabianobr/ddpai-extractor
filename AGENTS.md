@@ -16,7 +16,7 @@ media under ignored paths such as `working_data/`, `merged_videos/`, `data/`, an
 python3 -m unittest discover -s tests -v  # Run the Python test suite
 ./build.sh                                # Build data/trips.json from camera inputs
 ./tools/build_parallel.sh                 # Parallel database build
-./run.sh                                  # Serve dashboard at http://localhost:8000/web/
+./run.sh                                  # Serve dashboard at http://localhost:8765/web/
 ./tools/extract_photos.sh                 # Copy prepared DDpai JPEGs locally
 ```
 

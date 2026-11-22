@@ -19,6 +19,7 @@ from build_database import (
     parse_tar_filename, detect_trip_groups, extract_gps_from_tar,
     detect_idle_segments, discover_videos, validate_gps, validate_videos,
     compute_trip_stats, merge_videos, save_merge_report, is_parking_file,
+    report_trip_marker,
     extract_video_duration, validate_video_gps_duration, compute_sparse_timestamps,
     WORKING_DIR, VIDEO_DIR_REAR, VIDEO_DIR_FRONT,
     OUTPUT_DIR, MERGED_VIDEO_DIR, OUTPUT_JSON, GAP_THRESHOLD,
@@ -154,6 +155,7 @@ def process_group(group_idx, group, total_groups, inner_executor):
             for line in rear_debug + front_debug:
                 print(line, flush=True)
 
+        group_merge_info.append(report_trip_marker(group_id))
         group_merge_info.extend(rear_debug)
         group_merge_info.extend(front_debug)
 

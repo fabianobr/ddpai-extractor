@@ -183,7 +183,7 @@ refactor(nmea): simplify checksum validation logic
 - Update CHANGELOG.md for releases
 - Test manually (no automated test suite yet):
   - Run `./build.sh` and verify `data/trips.json` regenerates
-  - Run `./run.sh` and open http://localhost:8000/web/
+  - Run `./run.sh` and open http://localhost:8765/web/
   - Check browser DevTools Console for JavaScript errors
 
 ## Hardcoded Paths
@@ -219,7 +219,7 @@ Until an automated test suite is added, manually validate:
 3. **Web UI:**
    ```bash
    ./run.sh
-   # Open http://localhost:8000/web/
+   # Open http://localhost:8765/web/
    # Select a trip, verify map renders, play video
    ```
 

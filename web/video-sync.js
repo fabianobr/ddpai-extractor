@@ -28,6 +28,16 @@
         let changing = false;
         const pendingPlay = new WeakSet();
         const pendingPause = new WeakSet();
+        /* Elementos cujo currentTime foi alterado por este código: o 'seeking' resultante não deve ser re-propagado. */
+        const programmaticSeek = new WeakSet();
+        function seekTo(video, time) {
+            if (Math.abs(video.currentTime - time) <= 0.001) return;  /* sem mudança real pode não haver evento: não marcar */
+            programmaticSeek.add(video);
+            video.currentTime = time;
+        }
+        function hasEnded(video) {
+            return !!video.ended || (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.05);
+        }
         state.pauseForMissingCoverage = function (video) {
             if (video && !video.paused) { pendingPause.add(video); video.pause(); }
         };
@@ -54,7 +64,7 @@
                 if (state.onCoverageChange) state.onCoverageChange(otherName, true);
                 changing = true;
                 if (!other.hasAttribute('src')) other.src = other.dataset.lazySrc;
-                if (Math.abs(other.currentTime - target) > 0.2) other.currentTime = target;
+                if (Math.abs(other.currentTime - target) > 0.2) seekTo(other, target);
                 if (other.paused) {
                     pendingPlay.add(other);
                     const promise = other.play();
@@ -64,13 +74,16 @@
             });
             video.addEventListener('pause', function () {
                 if (pendingPause.has(video)) { pendingPause.delete(video); return; }
+                if (hasEnded(video)) return;  /* fim natural: o navegador dispara 'pause' antes de 'ended'; a outra câmera segue até o próprio fim */
                 if (changing || state.isSyncing || state.mode !== 'linked' || !other || other.paused) return;
                 changing = true;
                 pendingPause.add(other);
                 other.pause();
                 changing = false;
             });
+            video.addEventListener('seeked', function () { programmaticSeek.delete(video); });
             video.addEventListener('seeking', function () {
+                if (programmaticSeek.has(video)) { programmaticSeek.delete(video); return; }
                 if (changing || state.isSyncing || state.mode !== 'linked' || !other || !other.dataset.lazySrc) return;
                 const target = correspondingTime(name, otherName, video.currentTime);
                 if (target === null) {
@@ -82,7 +95,7 @@
                 if (Math.abs(other.currentTime - target) < 0.2) return;
                 changing = true;
                 if (!other.hasAttribute('src')) other.src = other.dataset.lazySrc;
-                other.currentTime = target;
+                seekTo(other, target);
                 changing = false;
             });
             video.addEventListener('timeupdate', function () {
@@ -95,7 +108,7 @@
                 }
                 if (state.onCoverageChange) state.onCoverageChange(otherName, true);
                 if (!other.hasAttribute('src')) other.src = other.dataset.lazySrc;
-                if (Math.abs(other.currentTime - target) > 0.75) other.currentTime = target;
+                if (Math.abs(other.currentTime - target) > 0.75) seekTo(other, target);
                 if (other.paused && !video.paused) {
                     pendingPlay.add(other);
                     const promise = other.play();

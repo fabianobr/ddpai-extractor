@@ -6,20 +6,31 @@ import shutil
 import sys
 
 
+class UnsatisfiableRange(ValueError):
+    """Well-formed range that lies outside the file (answered with 416)."""
+
+
 def parse_byte_range(value, size):
+    """Return (start, end) inclusive.
+
+    Raises UnsatisfiableRange for a valid range outside the file (416) and plain
+    ValueError for a malformed/inverted/unsupported one, which per RFC 7233 must
+    be ignored (serve the whole file with 200).
+    """
     match = re.fullmatch(r'bytes=(\d*)-(\d*)', value.strip())
-    if not match or not size:
+    if not match or match.group(1) == match.group(2) == '':
         raise ValueError('invalid range')
     first, last = match.groups()
     if not first:
-        if not last or int(last) <= 0:
-            raise ValueError('invalid suffix range')
+        if int(last) <= 0 or not size:
+            raise UnsatisfiableRange('unsatisfiable suffix range')
         return max(0, size - int(last)), size - 1
     start = int(first)
-    end = min(int(last), size - 1) if last else size - 1
-    if start >= size or end < start:
-        raise ValueError('unsatisfiable range')
-    return start, end
+    if last and int(last) < start:
+        raise ValueError('inverted range')
+    if start >= size:
+        raise UnsatisfiableRange('range starts beyond end of file')
+    return start, min(int(last), size - 1) if last else size - 1
 
 
 class RangeHandler(http.server.SimpleHTTPRequestHandler):
@@ -37,12 +48,16 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         size = os.fstat(stream.fileno()).st_size
         try:
             start, end = parse_byte_range(header, size)
-        except ValueError:
+        except UnsatisfiableRange:
             stream.close()
             self.send_response(416)
             self.send_header('Content-Range', 'bytes */{}'.format(size))
             self.end_headers()
             return None
+        except ValueError:
+            # Malformed/inverted range-spec: RFC 7233 says to ignore it and serve 200.
+            stream.close()
+            return super().send_head()
         self.byte_range = (start, end)
         self.send_response(206)
         self.send_header('Content-Type', self.guess_type(path))
@@ -55,15 +70,19 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         return stream
 
     def copyfile(self, source, outputfile):
-        if self.byte_range is None:
-            return shutil.copyfileobj(source, outputfile)
-        remaining = self.byte_range[1] - self.byte_range[0] + 1
-        while remaining:
-            chunk = source.read(min(1024 * 1024, remaining))
-            if not chunk:
-                break
-            outputfile.write(chunk)
-            remaining -= len(chunk)
+        # Browsers abort range requests on every seek; that is normal, not an error.
+        try:
+            if self.byte_range is None:
+                return shutil.copyfileobj(source, outputfile)
+            remaining = self.byte_range[1] - self.byte_range[0] + 1
+            while remaining:
+                chunk = source.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                outputfile.write(chunk)
+                remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 
 if __name__ == '__main__':

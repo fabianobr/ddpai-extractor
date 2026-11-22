@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -15,6 +16,28 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.extraction import build_database as builder
 from src.extraction.video_timeline import build_video_sync
+
+
+DEFAULT_INDEX_MODE = 0o644
+
+
+def write_index_atomic(data, database):
+    """Write JSON via temp file + os.replace, keeping the original file permissions."""
+    database = Path(database)
+    try:
+        mode = stat.S_IMODE(os.stat(str(database)).st_mode)
+    except OSError:
+        mode = DEFAULT_INDEX_MODE
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', dir=str(database.parent), delete=False) as temp:
+        try:
+            json.dump(data, temp)
+            temp.flush()
+            os.fsync(temp.fileno())
+            os.chmod(temp.name, mode)
+        except Exception:
+            os.unlink(temp.name)
+            raise
+    os.replace(temp.name, str(database))
 
 
 def main():
@@ -127,16 +150,7 @@ def main():
     backup = backup_dir / ('trips-before-sync-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.json')
     shutil.copy2(str(database), str(backup))
     data['sync_refreshed_at'] = datetime.now(timezone.utc).isoformat()
-    with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', dir=str(database.parent), delete=False) as temp:
-        try:
-            json.dump(data, temp)
-            temp.flush()
-            os.fsync(temp.fileno())
-            temp_name = temp.name
-        except Exception:
-            os.unlink(temp.name)
-            raise
-    os.replace(temp_name, str(database))
+    write_index_atomic(data, database)
     print('Atualizado: {} | backup: {}'.format(database, backup), flush=True)
 
 

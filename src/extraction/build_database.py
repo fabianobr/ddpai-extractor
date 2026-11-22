@@ -7,6 +7,7 @@ import os
 import sys
 import glob
 import json
+import logging
 import tarfile
 import subprocess
 import tempfile
@@ -15,6 +16,8 @@ from datetime import datetime, timedelta, timezone, time, date
 from collections import defaultdict
 import time as time_module
 from src.extraction.video_timeline import build_video_sync
+
+logger = logging.getLogger(__name__)
 
 # Default Configuration
 DEFAULT_WORKING_DIR = '/Users/fabianosilva/Documentos/code/ddpai_extractor/working_data/tar'
@@ -473,8 +476,14 @@ def merge_gps_points(rmc_points, gga_points, tar_date=None):
 
     return sorted(points, key=lambda p: p['timestamp'])
 
-def extract_gps_from_tar(tar_path, drop_stale=True):
-    """Extract all GPS points from tar file."""
+def extract_gps_from_tar(tar_path, drop_stale=True, errors=None):
+    """Extract all GPS points from tar file.
+
+    A TAR that cannot be read completely (corrupt or truncated) is never silent: the path
+    and the exception are logged (stderr) and, if ``errors`` is a list, appended to it as
+    ``(tar_path, exception)``. Members read before the failure are still returned, so
+    callers can tell "no GPS" (empty result, no error) from "unreadable" (error recorded).
+    """
     points = []
 
     # Extract date from TAR filename (e.g., 20260314060147 → 2026-03-14)
@@ -489,7 +498,8 @@ def extract_gps_from_tar(tar_path, drop_stale=True):
 
     try:
         with tarfile.open(tar_path, 'r:') as tar:
-            for member in tar.getmembers():
+            # Iterate lazily (not getmembers) so members before a truncation point survive.
+            for member in tar:
                 if member.name.endswith('.gpx'):
                     f = tar.extractfile(member)
                     if f:
@@ -502,7 +512,10 @@ def extract_gps_from_tar(tar_path, drop_stale=True):
                             point['camera_segment'] = segment_name
                         points.extend(merged)
     except Exception as e:
-        pass
+        logger.warning("Unreadable or truncated GPS archive %s (%d point(s) recovered): %s: %s",
+                       tar_path, len(points), type(e).__name__, e)
+        if errors is not None:
+            errors.append((tar_path, e))
 
     return points
 
@@ -530,7 +543,7 @@ def parse_tar_filename(filename):
     except ValueError:
         return None, None
 
-def is_parking_file(tar_path, drop_stale=True):
+def is_parking_file(tar_path, drop_stale=True, unreadable=None):
     """
     Hybrid parking detection: Classifies TAR file as parking or driving.
     Returns True if parking, False if driving.
@@ -540,8 +553,15 @@ def is_parking_file(tar_path, drop_stale=True):
     - Original: distance < 0.1 km OR avg_speed < 1.5 km/h
     - Issue: File 18:01 BRT (0.57 km, 3.3 km/h) was wrongly classified as DRIVING
     - Fix: Increased both thresholds to catch edge cases during parking transitions
+
+    An unreadable/truncated archive is still classified from whatever points were recovered
+    (usually parking), but its path is appended to ``unreadable`` (if given) so callers can
+    warn instead of treating it as a genuinely parked file.
     """
-    points = extract_gps_from_tar(tar_path, drop_stale=drop_stale)
+    errors = []
+    points = extract_gps_from_tar(tar_path, drop_stale=drop_stale, errors=errors)
+    if errors and unreadable is not None:
+        unreadable.append(tar_path)
     if not points or len(points) < 2:
         return True  # Assume parking if no GPS data
 
@@ -556,11 +576,12 @@ def is_parking_file(tar_path, drop_stale=True):
     return is_parking
 
 
-def detect_trip_groups(tar_files, verbose=False, drop_stale=True):
+def detect_trip_groups(tar_files, verbose=False, drop_stale=True, unreadable=None):
     """
     Detect trip groups using 30-minute gap threshold.
     Pre-filters parking files via is_parking_file() (distance < 0.6 km OR avg_speed < 3.0 km/h) before grouping.
-    Returns (groups, gap_info, parking_files).
+    Returns (groups, gap_info, parking_files). Paths of unreadable archives are appended to
+    ``unreadable`` when a list is given (they are also part of parking_files).
     """
     sorted_files = sorted(tar_files)
     groups = []
@@ -576,7 +597,7 @@ def detect_trip_groups(tar_files, verbose=False, drop_stale=True):
             continue
 
         # Pre-filter: Skip parking files
-        if is_parking_file(tar_path, drop_stale=drop_stale):
+        if is_parking_file(tar_path, drop_stale=drop_stale, unreadable=unreadable):
             parking_files.append(tar_path)
             continue
 
@@ -1142,6 +1163,18 @@ def validate_videos(rear_videos, front_videos):
 # Main
 # ============================================================================
 
+REPORT_TRIP_MARKER = 'TRIP: '
+
+
+def report_trip_marker(group_id):
+    """Line that tags the merge-report sections that follow with their trip id.
+
+    The REAR/FRONT section regex used by tools/refresh_video_sync.py ignores it; it lets
+    trip_import merge reports from several imports without guessing which section is whose.
+    """
+    return REPORT_TRIP_MARKER + group_id
+
+
 def save_merge_report(report_file, report_lines):
     """Save merge report to file."""
     try:
@@ -1340,6 +1373,7 @@ def main():
             rear_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_rear.mp4')
             front_output = os.path.join(MERGED_VIDEO_DIR, f'{group_id}_front.mp4')
 
+            all_merge_info.append(report_trip_marker(group_id))
             rear_ok, rear_debug = merge_videos(rear_videos, rear_output, 'Rear')
             if rear_debug:
                 for line in rear_debug:
