@@ -8,6 +8,9 @@
 > Os três protótipos usam os mesmos dados (`mock-data.js`) e o mesmo núcleo de comportamento (`proto-core.js`):
 > relógio único, posição na rota, marcos derivados, atalhos e menus. A diferença entre eles é só de
 > conceito, layout e identidade visual. Por isso a comparação é justa.
+>
+> **Dados locais:** `mock-data.js` e `frames/` são gerados localmente a partir de `data/trips.json` e dos vídeos
+> e **não são versionados** (o repositório é público). Sem eles, os protótipos abrem sem dados.
 
 ---
 
