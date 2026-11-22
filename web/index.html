@@ -48,7 +48,7 @@ try { const saved = localStorage.getItem('theme'); if (saved === 'light' || save
     --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
     --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
-  --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
+    --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
   }
 }
 * { box-sizing: border-box; }
@@ -56,7 +56,8 @@ html, body { margin: 0; }
 body { background: var(--paper); color: var(--ink); font: 400 15px/1.45 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
 button, input { font: inherit; color: inherit; }
 /* números e horários na grotesca: o zero cortado da Atkinson fica só no texto corrido */
-.clock span, .dstats b, .readouts b, .chlist time, .axis, .coordbar span, .badge, .trip-item .meta, .chip { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
+.clock span, .dstats b, .dstats span, .readouts b, .readouts span, .chlist time, .chlist p, .axis, .coordbar, .coordbar span,
+.badge, .trip-item, .trip-item .meta, .trips h3, .picker .sub, .chip, .routepop, .pnote, .tip, .qmini, .pill, .overlay, .camname { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
 :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -138,6 +139,8 @@ button, input { font: inherit; color: inherit; }
 .stage-empty b { font: 700 24px/1.1 'Familjen Grotesk', system-ui, sans-serif; color: #fff; }
 .stage-empty .i { width: 30px; height: 30px; margin: 0 auto; }
 .stage-play { position: absolute; z-index: 3; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--yellow); color: var(--yellow-ink); cursor: pointer; box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+.stage.side .stage-play { left: calc(25% - 1px); }   /* centro da câmera principal (coluna esquerda: frente) */
+.stage.side.rear-main .stage-play { left: calc(75% + 1px); }
 .stage-play:hover { filter: brightness(1.06); }
 .stage-play .i { width: 34px; height: 34px; margin-left: 3px; }
 .stagectl { position: absolute; z-index: 3; right: 14px; top: 14px; display: flex; gap: 6px; }
@@ -154,8 +157,8 @@ button, input { font: inherit; color: inherit; }
 .mapbtns .i { width: 17px; height: 17px; }
 .leaflet-container { font-family: inherit; }
 .leaflet-tile-pane { filter: var(--tile-filter); }
-.leaflet-control-attribution { background: var(--card); color: var(--ink-2); opacity: .9; }
-.leaflet-control-attribution a { color: var(--blue); }
+.leaflet-container .leaflet-control-attribution { background: var(--card); color: var(--ink); }   /* seletor do Leaflet tem especificidade maior */
+.leaflet-container .leaflet-control-attribution a { color: var(--blue); text-decoration: underline; }
 .chapters { grid-area: chapters; background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); overflow: auto; padding: 14px 10px 10px 14px; min-height: 0; }
 .chapters h2 { margin: 0 0 6px 4px; font-size: 18px; font-weight: 700; }
 .chlist { list-style: none; margin: 0; padding: 0; position: relative; }
@@ -232,6 +235,7 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
 .tipwrap { position: relative; }
 .tip { position: absolute; z-index: 30; top: calc(100% + 10px); right: 0; width: 300px; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: var(--card); font-size: 14px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s; box-shadow: var(--shadow); }
 .tipwrap:hover .tip, .tipwrap:focus-within .tip, .tipwrap.show .tip { opacity: 1; visibility: visible; }
+.tipwrap.dismissed .tip { opacity: 0; visibility: hidden; }
 .qmini { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
 .qmini .i { width: 14px; height: 14px; color: var(--green); }
 .qmini[data-tone=warn] { color: var(--ink); } .qmini[data-tone=warn] .i { color: var(--gapc); } .qmini[data-tone=none] .i { color: var(--ink-3); }
@@ -627,6 +631,10 @@ function toggleTheme() {
 const popovers = [];
 
 function closePopovers() {
+    const tipWrap = $('quality-wrap');
+    // 'dismissed' esconde a dica mesmo com o foco na pílula (:focus-within); some ao sair/entrar de novo
+    if (tipWrap.classList.contains('show') || tipWrap.contains(document.activeElement)) tipWrap.classList.add('dismissed');
+    tipWrap.classList.remove('show');
     popovers.forEach(({button, panel}) => {
         if (panel.hidden) return;
         panel.hidden = true;
@@ -798,7 +806,7 @@ function loadTripVideos(trip) {
 function updateLayoutButtons() {
     const stage = $('stage');
     const swapped = syncState.activeVideo === 'rear';
-    stage.className = 'stage ' + (layoutMode === 'side' ? 'side' : swapped ? 'pip swapped' : 'pip');
+    stage.className = 'stage ' + (layoutMode === 'side' ? (swapped ? 'side rear-main' : 'side') : swapped ? 'pip swapped' : 'pip');
     const both = CAMERAS.every(hasVideo);
     $('layout-side').setAttribute('aria-pressed', String(layoutMode === 'side'));
     $('layout-side').disabled = !both;
@@ -824,6 +832,9 @@ function updateLayoutButtons() {
 function swapCamera() {
     const other = syncState.activeVideo === 'front' ? 'rear' : 'front';
     if (!hasVideo(other)) return;
+    const previous = cameraVideo(syncState.activeVideo);
+    // modo separado: só a câmera principal é controlada; a anterior não pode ficar tocando solta
+    if (syncState.mode === 'independent' && !previous.paused) previous.pause();
     syncState.activeVideo = other;
     updateLayoutButtons();
     updatePlayButton();
@@ -872,7 +883,7 @@ function initMap() {
     map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([-27.5, -48.5], 11);
     L.control.zoom({position: 'topleft', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar'}).addTo(map);
     L.control.attribution({prefix: false, position: 'bottomright'}).addTo(map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>'}).addTo(map);
     map.on('click', event => {
         setMapCoordinate(event.latlng.lat, event.latlng.lng);
         seekToPoint(nearestPointIndex(event.latlng.lat, event.latlng.lng));
@@ -1061,7 +1072,9 @@ function updatePlayButton() {
     button.setAttribute('aria-label', label);
     button.title = !anyVideo ? label : `${label} (espaço)`;
     $('play-icon').setAttribute('href', playing ? '#i-pause' : '#i-play');
-    $('stage-play').hidden = !anyVideo || playing;
+    const stagePlay = $('stage-play');
+    stagePlay.hidden = !anyVideo || playing;
+    if (stagePlay.hidden && document.activeElement === stagePlay) button.focus();   // foco não se perde ao iniciar
 }
 
 function togglePlay() {
@@ -1527,7 +1540,8 @@ async function loadDatabase() {
     const res = await fetch('../data/trips.json');
     if (!res.ok) throw new Error(`o servidor respondeu ${res.status} ao buscar data/trips.json`);
     const db = await res.json();
-    return db.trips || [];
+    // trilha com menos de 2 pontos não dá rota nem linha do tempo
+    return (db.trips || []).filter(trip => Array.isArray(trip.points) && trip.points.length >= 2);
 }
 
 function showEmptyState() {
@@ -1581,7 +1595,16 @@ function wireControls() {
     $('route-gpx').addEventListener('click', () => exportRoute('gpx'));
     $('route-kml').addEventListener('click', () => exportRoute('kml'));
     $('route-clear').addEventListener('click', clearRoute);
-    $('quality-pill').addEventListener('click', () => $('quality-wrap').classList.toggle('show'));
+    $('quality-pill').addEventListener('click', () => {
+        const wrap = $('quality-wrap');
+        const wasOpen = wrap.classList.contains('show');
+        closePopovers();
+        if (wasOpen) return;
+        wrap.classList.remove('dismissed');
+        wrap.classList.add('show');
+    });
+    ['mouseenter', 'focusout'].forEach(name => $('quality-wrap').addEventListener(name, () => $('quality-wrap').classList.remove('dismissed')));
+    document.addEventListener('click', event => { if (!event.target.closest('#quality-wrap')) $('quality-wrap').classList.remove('show'); });
     $('map-follow').addEventListener('click', toggleFollow);
     $('map-fit').addEventListener('click', () => {
         followVehicle = false;
@@ -1632,7 +1655,7 @@ async function init() {
     wireControls();
     updateSyncLock();
     selectTrip(initialTripIndex(trips), false);
-    location.hash = 'viagem-' + currentTrip.id;
+    history.replaceState(null, '', '#viagem-' + currentTrip.id);   // sem nova entrada no histórico
 }
 
 init();

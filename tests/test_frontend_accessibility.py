@@ -158,5 +158,43 @@ class TestSelectionAndQuality(unittest.TestCase):  # Tarefa 7
         self.assertIn('video_notes', function_body('renderTechDetails'))
 
 
+
+class TestFinalReviewPolish(unittest.TestCase):
+    def test_osm_attribution_is_a_link(self):
+        self.assertIn('<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>', HTML)
+        self.assertRegex(HTML, r'\.leaflet-container \.leaflet-control-attribution\s*\{[^}]*background: var\(--card\)')
+        self.assertNotRegex(HTML, r'\.leaflet-control-attribution\s*\{[^}]*opacity')
+
+    def test_initial_hash_does_not_add_history_entry(self):
+        body = function_body('init')
+        self.assertIn('history.replaceState', body)
+        self.assertNotIn('location.hash =', body)
+
+    def test_trips_without_enough_points_are_dropped(self):
+        self.assertRegex(function_body('loadDatabase'), r'points\.length\s*>=\s*2')
+
+    def test_tooltip_closes_with_esc_and_outside_click(self):
+        self.assertIn('quality-wrap', function_body('closePopovers'))
+        self.assertIn("case 'Escape': closePopovers()", HTML)
+        self.assertRegex(HTML, r"closest\('#quality-wrap'\)")
+
+    def test_swap_pauses_previous_camera_in_independent_mode(self):
+        body = function_body('swapCamera')
+        self.assertIn("'independent'", body)
+        self.assertIn('.pause()', body)
+
+    def test_play_focus_moves_to_transport_button(self):
+        self.assertIn('document.activeElement === stagePlay', function_body('updatePlayButton'))
+
+    def test_stage_play_centered_on_main_camera_in_side_layout(self):
+        self.assertRegex(HTML, r'\.stage\.side\.rear-main \.stage-play\s*\{[^}]*left:')
+
+    def test_digits_use_grotesque_in_shared_selector_list(self):
+        m = re.search(r'\n((?:[^\n{]*,\n)*[^\n{]*)\{\s*font-family:\s*\'Familjen Grotesk\'', HTML)
+        self.assertIsNotNone(m)
+        for sel in ('.chlist p', '.picker .sub', '.coordbar', '.routepop', '.tip', '.readouts span'):
+            self.assertIn(sel, m.group(1))
+
+
 if __name__ == '__main__':
     unittest.main()
