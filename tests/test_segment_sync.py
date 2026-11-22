@@ -34,6 +34,37 @@ class TestSegmentSync(unittest.TestCase):
         self.assertEqual(result['status'], 'unavailable')
 
 
+class TestSingleCameraStatus(unittest.TestCase):
+    """A camera that was not supplied is absent, not a coverage gap."""
+
+    def points(self):
+        return [
+            {'timestamp': datetime(2026,11,21,12,3,22), 'camera_segment': '20261121090410'},
+            {'timestamp': datetime(2026,11,21,12,3,32), 'camera_segment': '20261121090410'},
+        ]
+
+    def test_fully_mapped_single_camera_is_ok(self):
+        rear = ['20261121090410_0060_A.mp4']
+        result = build_video_sync(self.points(), rear, [], duration_fn=lambda p: 60.0)
+        self.assertEqual(result['rear'], [0.0, 10.0])
+        self.assertEqual(result['status'], 'ok')
+
+    def test_single_front_camera_is_ok(self):
+        front = ['20261121090410_0060_A.mp4']
+        result = build_video_sync(self.points(), [], front, duration_fn=lambda p: 60.0)
+        self.assertEqual(result['status'], 'ok')
+
+    def test_single_camera_with_uncovered_point_is_partial(self):
+        # Same segment, but recorded after the 60 s video ended: no footage for this point.
+        pts = self.points() + [{'timestamp': datetime(2026,11,21,12,5,30), 'camera_segment': '20261121090410'}]
+        result = build_video_sync(pts, ['20261121090410_0060_A.mp4'], [], duration_fn=lambda p: 60.0)
+        self.assertEqual(result['status'], 'partial')
+
+    def test_no_cameras_is_unavailable(self):
+        result = build_video_sync(self.points(), [], [], duration_fn=lambda p: 60.0)
+        self.assertEqual(result['status'], 'unavailable')
+
+
 class TestBoundaryPointsMapByVideoWindow(unittest.TestCase):
     """GPS points attributed to the next .gpx but recorded just before its video starts."""
 

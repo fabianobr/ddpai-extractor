@@ -139,7 +139,12 @@ def build_video_sync(points, rear_videos, front_videos, duration_fn):
     rear, rear_complete, rear_duration = map_camera(rear_videos)
     front, front_complete, front_duration = map_camera(front_videos)
     available = [x for x in rear + front if x is not None]
-    status = 'unavailable' if not available else ('ok' if all(x is not None for x in rear + front) and rear_complete and front_complete else 'partial')
+    # A camera that was not supplied (no video for it) is absent, not a coverage gap:
+    # judge completeness only over the cameras that actually have videos.
+    supplied = [(values, complete) for values, complete, paths in
+                ((rear, rear_complete, rear_videos), (front, front_complete, front_videos)) if paths]
+    fully_covered = all(complete and all(x is not None for x in values) for values, complete in supplied)
+    status = 'unavailable' if not available else ('ok' if fully_covered else 'partial')
     return {'rear': rear, 'front': front, 'status': status, 'clock_offset_s': offset,
             'rear_source_duration_s': round(rear_duration, 3),
             'front_source_duration_s': round(front_duration, 3),
