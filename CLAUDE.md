@@ -105,7 +105,7 @@ Merge rear/front videos using FFmpeg (H.264 720p re-encoding)
     ↓ [Write data/trips.json]
 Generate JSON database (GPS points, trip stats, video paths)
     ↓ [web/index.html]
-Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
+Browser fetches JSON, renders map/SVG timeline/videos (Leaflet + inline SVG)
 ```
 
 ### Core Modules
@@ -122,10 +122,15 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - Same functions as build_database.py, parallel video encoding (2.5-3.5× speedup)
 
 **web/index.html** (Frontend)
-- Fetches `data/trips.json` dynamically at page load
-- Renders interactive map (Leaflet.js), speed/altitude charts (Chart.js)
-- Displays trip selector, linked rear+front video players
-- All UI logic is client-side JavaScript
+- Fetches `data/trips.json` at page load; `#viagem-<id>` selects a trip, default is the most recent
+- Trip detail screen: chapters, Leaflet map (OSM tiles with per-theme CSS filter), SVG metro-line timeline
+  (speed/altitude bands, playhead, `role="slider"`), single transport bar, front/rear cameras, light/dark theme, shortcuts
+- Inline script is DOM glue only; the pure logic lives in `web/trip-model.js`
+
+**web/trip-model.js** (Pure helpers, UMD, no DOM)
+- Time mapping, downsampling, chapter and idle helpers; tested by `tests/test_trip_model.py`
+
+**web/video-sync.js** (Video-GPS sync logic, used by index.html)
 
 **Utilities**
 - **src/processing/merge_trips.py**: Standalone trip merging (rarely used)
@@ -133,6 +138,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - **src/extraction/ddpai_route_improved.py**: Original GPS extraction code (reference)
 - **tools/build_parallel.sh**: Parallel build entry point
 - **tools/debug_videos.sh**: Video debugging
+- **tools/cdp-shot.js**: Headless Chrome screenshot at an exact viewport (Node 22+, no npm deps)
 - **tools/install_fftools.sh**: FFmpeg helper
 
 ### Data Sources
@@ -178,7 +184,7 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - **Format**: Static HTML (web/index.html) + external JSON (data/trips.json)
 - **Data Loading**: Async fetch() at page load, error handling for missing data
 - **Map**: Leaflet.js (requires HTTP serving for tiles)
-- **Charts**: Chart.js (speed + altitude profiles)
+- **Timeline**: inline SVG (speed + altitude bands, playhead, chapter stations); no charting library
 - **Videos**: <video> elements with relative paths (../merged_videos/*.mp4)
 
 ## Development & Modification
@@ -282,9 +288,10 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 - FFmpeg timeout (1800s = 30 min) is sufficient for trips up to 206 min; longer trips may need adjustment
 
 **Customize dashboard UI** (web/index.html)
-- Edit CSS (lines 11-170) for styling changes
-- Modify JavaScript functions (renderApp, updateMap, updateCharts, updateVideos)
-- Update Leaflet map center/zoom, Chart.js colors, etc.
+- Edit the `:root` colour tokens (light and dark) and component CSS for styling changes
+- Key functions: renderHeader, renderChapters, updatePlayhead, seekToPoint, handleShortcut
+- Map tile filter is `--tile-filter`; timeline colours come from the same tokens
+- Put pure logic in `web/trip-model.js` and extend `tests/test_trip_model.py`
 
 **Add new trip metadata to JSON**
 - Edit `groups_data.append()` section in src/extraction/build_database.py
@@ -292,13 +299,14 @@ Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
 
 ### Testing & Validation
 
-No automated test suite. Manual validation:
+Automated tests: `python3 -m unittest discover -s tests -v` (includes Node-based tests for `web/trip-model.js` and `web/video-sync.js`, and static contract tests for `web/index.html`). Manual validation:
 
 1. **Check trip detection**: `./build.sh` prints detected groups + validation results
 2. **Verify database**: `python3 -c "import json; d=json.load(open('data/trips.json')); print(len(d['trips']), 'trips')"`
 3. **Test UI**: `./run.sh` → open http://localhost:8765/web/ → select trip, play video
 4. **Check DevTools**: Browser Console for JavaScript errors, Network tab for JSON fetch
 5. **Validate maps**: Ensure Leaflet polyline renders for each trip (requires HTTP server)
+6. **Exact-viewport screenshots**: `node tools/cdp-shot.js http://localhost:8765/web/ /tmp/shot.png 1440 900 [--dark]` (needs `google-chrome` on PATH and Node 22+)
 
 **FFmpeg Build Time Expectations:**
 - Short trips (10-20 min): ~5-10 min encode time
@@ -311,7 +319,7 @@ No automated test suite. Manual validation:
 **External Tools**
 - FFmpeg with libx264 support (for video re-encoding) — verify with: `ffmpeg -codecs | grep h264`
 - Python 3.6+ (standard library only: tarfile, json, subprocess, datetime, pathlib, collections, math)
-- Web browser (Leaflet.js + Chart.js loaded from CDN in HTML)
+- Web browser (Leaflet.js loaded from CDN; OpenStreetMap tiles; timeline is inline SVG)
 
 **System Requirements**
 - Sufficient disk space: ~15 GB for merged videos + source files
@@ -383,6 +391,8 @@ ddpai_extractor/
 │
 ├── web/                 # Web frontend
 │   ├── index.html              # Dashboard: fetches data/trips.json, renders UI
+│   ├── trip-model.js           # Pure trip helpers (tested)
+│   ├── video-sync.js           # Video-GPS sync logic
 │   ├── favicon.ico             # Icon
 │   └── favicon.png             # Icon
 │
