@@ -188,7 +188,8 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
 .readouts div { display: grid; line-height: 1.15; }
 .readouts b { font-size: 19px; font-weight: 700; white-space: nowrap; }
 .readouts span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
-.timeline { position: relative; margin-top: 8px; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 8px; }
+.tl-wrap { position: relative; margin-top: 8px; }
+.timeline { position: relative; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 8px; }
 .timeline svg { display: block; overflow: visible; }
 .timeline text { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 12px; fill: var(--ink-3); }
 .tl-base { fill: var(--line); }
@@ -213,6 +214,37 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
 .lock { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink-2); }
 .lock[aria-pressed=false] { background: var(--yellow-soft); color: var(--ink); border-color: transparent; }
 .lock .i { width: 17px; height: 17px; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; cursor: help; white-space: nowrap; color: var(--ink-2); }
+.pill .i { width: 17px; height: 17px; color: var(--green); }
+.pill[data-tone=warn] { background: var(--yellow-soft); border-color: transparent; color: var(--ink); }
+.pill[data-tone=warn] .i { color: var(--gapc); }
+.pill[data-tone=none] .i { color: var(--ink-3); }
+.tipwrap { position: relative; }
+.tip { position: absolute; z-index: 30; top: calc(100% + 10px); right: 0; width: 300px; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: var(--card); font-size: 14px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s; box-shadow: var(--shadow); }
+.tipwrap:hover .tip, .tipwrap:focus-within .tip, .tipwrap.show .tip { opacity: 1; visibility: visible; }
+.qmini { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+.qmini .i { width: 14px; height: 14px; color: var(--green); }
+.qmini[data-tone=warn] { color: var(--ink); } .qmini[data-tone=warn] .i { color: var(--gapc); } .qmini[data-tone=none] .i { color: var(--ink-3); }
+.coordbar { position: absolute; z-index: 1000; left: 10px; right: 10px; bottom: 28px; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow); font-size: 13px; }
+.coordbar > .i { color: var(--ink-3); }
+.coordbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip[aria-expanded=true], .chip.has { background: var(--blue-wash); border-color: transparent; color: var(--blue); }
+.routepop { width: 320px; padding: 14px; }
+.routepop h3 { margin: 0; font-size: 13px; color: var(--ink-3); font-weight: 400; }
+.routepop .rng-t { font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 24px; font-weight: 700; margin: 2px 0; }
+.routepop .rng-s { color: var(--ink-2); }
+.rowb { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.routepop .pnote { margin: 10px 0 0; }
+#route-message:empty { display: none; }
+.sel-layer { position: absolute; inset: 0; pointer-events: none; }
+.sel-range { position: absolute; top: 30px; height: 94px; background: var(--blue-wash); box-shadow: inset 2px 0 0 var(--blue), inset -2px 0 0 var(--blue); border-radius: 4px; }
+.sel-h { position: absolute; top: 46px; width: 16px; height: 42px; margin-left: -8px; border-radius: 8px; background: var(--blue); box-shadow: 0 0 0 2px var(--card); cursor: ew-resize; pointer-events: auto; touch-action: none; }
+.sel-h::after { content: ''; position: absolute; left: 7px; top: 11px; bottom: 11px; width: 2px; border-radius: 1px; background: rgba(255, 255, 255, .75); }
+.sel-h:focus-visible { outline-color: var(--ink); }
+.techpanel { padding: 8px 12px 10px; width: 340px; max-width: 100%; }
+.techpanel dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 13px; }
+.techpanel dt { color: var(--ink-3); } .techpanel dd { margin: 0; overflow-wrap: anywhere; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr) 320px; } .dstats div:nth-child(4) { display: none; } }
@@ -242,6 +274,12 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
   .stage.pip .cam[data-camera=rear], .stage.pip.swapped .cam[data-camera=front] { inset: auto 8px 8px auto; width: 34%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9); }
   .stage.pip .cam:not(.main) .camname { display: none; }
   .pop { right: auto; left: 0; }
+  .top .pop { left: auto; right: 0; }
+  .top > .popwrap:first-child .pop { left: 0; right: auto; }
+  .story .pop { right: 0; left: auto; }
+  .routepop { width: min(320px, calc(100vw - 32px)); }
+  .pill .lbl { display: none; } .pill { padding: 0 9px; }
+  .tip { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; }
   .trips { width: calc(100vw - 32px); }
 }
 </style>
@@ -327,7 +365,31 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
     </div>
     <div class="dstats" id="kpis" aria-label="Resumo da viagem"></div>
     <div class="grow"></div>
+    <div class="tipwrap" id="quality-wrap">
+      <button type="button" class="pill" id="quality-pill" data-tone="none" aria-describedby="quality-tip"><svg class="i" aria-hidden="true"><use id="quality-icon" href="#i-info"/></svg><span class="lbl" id="quality-text">Sem sincronização fina</span></button>
+      <div class="tip" role="tooltip" id="quality-tip"></div>
+    </div>
     <button type="button" class="icon" id="theme-toggle" title="Alternar tema claro/escuro"><svg class="i" aria-hidden="true"><use id="theme-icon" href="#i-moon"/></svg><span class="sr">Alternar tema claro/escuro</span></button>
+    <div class="popwrap">
+      <button type="button" class="icon" id="more-button" aria-haspopup="true" aria-expanded="false" aria-controls="more-popover" title="Mais ações"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg><span class="sr">Mais ações</span></button>
+      <div class="pop" id="more-popover" role="group" aria-label="Mais ações" hidden>
+        <button type="button" class="mi" id="copy-current-coordinate"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copiar coordenada do ponto atual</button>
+        <div class="msep" role="separator"></div>
+        <button type="button" class="mi" id="tech-toggle" aria-expanded="false" aria-controls="tech-details"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg>Detalhes técnicos</button>
+        <div class="techpanel" id="tech-details" hidden></div>
+        <button type="button" class="mi" id="keys-toggle" aria-expanded="false" aria-controls="keys-help"><svg class="i" aria-hidden="true"><use href="#i-keyboard"/></svg>Atalhos de teclado</button>
+        <div class="techpanel" id="keys-help" hidden>
+          <dl>
+            <dt>Espaço ou K</dt><dd>Reproduzir ou pausar</dd>
+            <dt>← → ou J L</dt><dd>Voltar ou avançar 10 s (com Shift, 1 min)</dd>
+            <dt>I e O</dt><dd>Marcar início e fim do trecho</dd>
+            <dt>M</dt><dd>Ampliar ou reduzir o mapa</dd>
+            <dt>C</dt><dd>Trocar a câmera principal</dd>
+            <dt>Esc</dt><dd>Fechar menus</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
   </header>
 
   <div class="main" id="main">
@@ -365,6 +427,10 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
           <button type="button" id="map-fit" title="Ver a rota inteira"><svg class="i" aria-hidden="true"><use href="#i-route"/></svg><span class="sr">Ver a rota inteira</span></button>
           <button type="button" id="map-expand" aria-pressed="false" title="Ampliar o mapa (M)"><svg class="i" aria-hidden="true"><use id="map-expand-icon" href="#i-expand"/></svg><span class="sr">Ampliar o mapa</span></button>
         </div>
+        <div class="coordbar" id="coord-bar" role="status" hidden>
+          <svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span id="map-coordinate-value"></span>
+          <button type="button" class="btn s" id="copy-map-coordinate"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-map-coordinate-label">Copiar</span></button>
+        </div>
       </section>
       <section class="chapters" aria-label="Capítulos da viagem">
         <h2 class="disp">Capítulos</h2>
@@ -393,8 +459,34 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
       </div>
       <div class="grow"></div>
       <button type="button" class="lock" id="sync-lock" aria-pressed="true"><svg class="i" aria-hidden="true"><use id="sync-lock-icon" href="#i-lock"/></svg><span class="sr" id="sync-lock-label">Câmeras juntas</span></button>
+      <div class="popwrap">
+        <button type="button" class="btn s chip" id="route-chip" aria-haspopup="dialog" aria-expanded="false" aria-controls="route-popover"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span id="route-chip-text">Selecionar trecho</span></button>
+        <div class="pop up routepop" id="route-popover" role="dialog" aria-label="Trecho selecionado" hidden>
+          <h3>Trecho</h3>
+          <div class="rng-t" id="route-range">Nenhum trecho marcado</div>
+          <div class="rng-s" id="route-summary">Marque o início e o fim para rever ou exportar um trecho. Atalhos: I e O.</div>
+          <div class="rowb">
+            <button type="button" class="btn s" id="route-mark-start"><svg class="i" aria-hidden="true"><use href="#i-markIn"/></svg>Início aqui</button>
+            <button type="button" class="btn s" id="route-mark-end"><svg class="i" aria-hidden="true"><use href="#i-markOut"/></svg>Fim aqui</button>
+          </div>
+          <div class="rowb">
+            <button type="button" class="btn s primary" id="route-gpx"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Exportar GPX</button>
+            <button type="button" class="btn s" id="route-kml"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>KML</button>
+            <button type="button" class="btn s" id="route-clear"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg>Limpar</button>
+          </div>
+          <p class="pnote">Exporta só a geometria do trecho (o traçado). Em outro aplicativo, a rota pode não seguir exatamente as mesmas ruas.</p>
+          <p class="pnote" id="route-message" role="status"></p>
+        </div>
+      </div>
     </div>
-    <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+    <div class="tl-wrap">
+      <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+      <div class="sel-layer" id="sel-layer" hidden>
+        <div class="sel-range" id="sel-range"></div>
+        <div class="sel-h" id="sel-start" role="slider" tabindex="0" aria-label="Início do trecho" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+        <div class="sel-h" id="sel-end" role="slider" tabindex="0" aria-label="Fim do trecho" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -406,6 +498,7 @@ const CAMERAS = ['front', 'rear'];
 const CAMERA_NAMES = {front: 'dianteira', rear: 'traseira'};
 const CHAPTER_ICONS = {start: 'flag', end: 'finish', stop: 'stop', max: 'gauge', climb: 'climb', descent: 'descent', gap: 'nofilm'};
 const DONE_REDRAW_MS = 250;
+const QUALITY_ICONS = {ok: '#i-check', warn: '#i-warn', none: '#i-info'};
 const TL = {padL: 52, padR: 14, stations: 28, line: 32, speed: 54, speedH: 34, alt: 92, altH: 22, axis: 120, height: 138};
 
 let trips = [];
@@ -563,6 +656,11 @@ function renderHeader(trip) {
     ];
     $('kpis').innerHTML = stats.map(([value, label]) => `<div><b>${value}</b><span>${label}</span></div>`).join('');
     document.title = `${TripModel.tripTitle(trip)} — Diário de viagens`;
+    const quality = qualityFor(trip);
+    $('quality-pill').dataset.tone = quality.tone;
+    $('quality-text').textContent = quality.label;
+    $('quality-icon').setAttribute('href', QUALITY_ICONS[quality.tone]);
+    $('quality-tip').textContent = quality.tip;
 }
 
 function renderTripPicker() {
@@ -585,9 +683,11 @@ function renderTripPicker() {
         item.className = 'trip-item';
         if (i === tripIndex) item.setAttribute('aria-current', 'true');
         const thumb = TripModel.routeThumbPath(trip.points, 72, 48, 60);
+        const quality = qualityFor(trip);
         const span = first === null ? '' : `${clockAt(trip, 0).slice(0, 5)} às ${clockAt(trip, trip.points.length - 1).slice(0, 5)}`;
         item.innerHTML = `<svg class="thumb" viewBox="0 0 72 48" aria-hidden="true"><path d="${thumb}"/></svg>` +
-            `<span><b>${TripModel.tripTitle(trip)}</b><span class="meta">${span ? span + ' · ' : ''}${formatNumber(trip.distance_km, 1)} km · ${TripModel.formatDuration(trip.duration_min * 60)}</span></span>`;
+            `<span><b>${TripModel.tripTitle(trip)}</b><span class="meta">${span ? span + ' · ' : ''}${formatNumber(trip.distance_km, 1)} km · ${TripModel.formatDuration(trip.duration_min * 60)}</span>` +
+            `<span class="qmini" data-tone="${quality.tone}"><svg class="i" aria-hidden="true"><use href="${QUALITY_ICONS[quality.tone]}"/></svg>${quality.label}</span></span>`;
         item.addEventListener('click', () => {
             closePopovers();
             selectTrip(i);
@@ -736,6 +836,7 @@ function styleMapLayers() {
     mapLayers.done.setStyle({color: c.ink});
     mapLayers.idle.forEach(layer => layer.setStyle({color: c.blue}));
     mapLayers.vehicle.setStyle({color: c.ink, fillColor: c.yellow});
+    if (mapLayers.selection) mapLayers.selection.setStyle({color: c.blue});
 }
 
 function updateTileLayer() {
@@ -753,7 +854,10 @@ function initMap() {
     L.control.zoom({position: 'topleft', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar'}).addTo(map);
     L.control.attribution({prefix: false, position: 'bottomright'}).addTo(map);
     updateTileLayer();
-    map.on('click', event => seekToPoint(nearestPointIndex(event.latlng.lat, event.latlng.lng)));
+    map.on('click', event => {
+        setMapCoordinate(event.latlng.lat, event.latlng.lng);
+        seekToPoint(nearestPointIndex(event.latlng.lat, event.latlng.lng));
+    });
 }
 
 function nearestPointIndex(lat, lon) {
@@ -770,6 +874,7 @@ function drawRoute(trip) {
     if (tripLayer) map.removeLayer(tripLayer);
     routeLatLngs = trip.points.map(p => [p[0], p[1]]);
     tripLayer = L.layerGroup().addTo(map);
+    mapLayers.selection = null;
     const line = (latlngs, options) => L.polyline(latlngs, Object.assign({interactive: false, lineCap: 'round', lineJoin: 'round'}, options)).addTo(tripLayer);
     mapLayers.casing = line(routeLatLngs, {weight: 9});
     mapLayers.base = line(routeLatLngs, {weight: 4});
@@ -991,12 +1096,6 @@ function onVideoTimeUpdate(event, camera) {
     syncState.isSyncing = false;
 }
 
-function markRoutePoint(which) {
-    if (!currentTrip) return;
-    if (which === 'start') routeStart = playIndex;
-    else routeEnd = playIndex;
-}
-
 function handleShortcut(event) {
     const target = event.target;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -1138,6 +1237,7 @@ function renderTimeline() {
     svgEl('circle', {cx: 0, cy: lineY, r: 8}, playhead);
     timeline = {width, plotW, total, xOf, playhead, done};
     host.setAttribute('aria-valuemax', String(Math.max(0, n - 1)));
+    layoutSelection();
     updatePlayhead(playIndex);
 }
 
@@ -1173,6 +1273,207 @@ function wireTimeline() {
     }).observe(host);
 }
 
+/* ---------- trecho ---------- */
+function routeBounds() {
+    if (routeStart === null || routeEnd === null) return null;
+    return {from: Math.min(routeStart, routeEnd), to: Math.max(routeStart, routeEnd)};
+}
+
+function layoutSelection() {
+    const bounds = routeBounds();
+    const visible = !!bounds && !!timeline && bounds.from !== bounds.to;
+    $('sel-layer').hidden = !visible;
+    if (!visible) return;
+    const x1 = timeline.xOf(bounds.from), x2 = timeline.xOf(bounds.to);
+    $('sel-range').style.left = x1 + 'px';
+    $('sel-range').style.width = Math.max(2, x2 - x1) + 'px';
+    $('sel-start').style.left = x1 + 'px';
+    $('sel-end').style.left = x2 + 'px';
+    const last = String(currentTrip.points.length - 1);
+    [['sel-start', bounds.from], ['sel-end', bounds.to]].forEach(([id, index]) => {
+        const handle = $(id);
+        handle.setAttribute('aria-valuemax', last);
+        handle.setAttribute('aria-valuenow', String(index));
+        handle.setAttribute('aria-valuetext', clockAt(currentTrip, index));
+    });
+}
+
+function updateRouteSelection() {
+    $('route-message').textContent = '';
+    const bounds = routeBounds();
+    const hasRange = !!bounds && bounds.from !== bounds.to;
+    const short = index => clockAt(currentTrip, index).slice(0, 5);
+    let chip = 'Selecionar trecho';
+    if (hasRange) chip = `Trecho ${short(bounds.from)}–${short(bounds.to)}`;
+    else if (routeStart !== null || routeEnd !== null) chip = routeStart !== null ? `Início ${short(routeStart)}, falta o fim` : `Fim ${short(routeEnd)}, falta o início`;
+    $('route-chip-text').textContent = chip;
+    $('route-chip').classList.toggle('has', hasRange);
+    if (hasRange) {
+        const seconds = TripModel.elapsedAt(currentTrip, bounds.to) - TripModel.elapsedAt(currentTrip, bounds.from);
+        $('route-range').textContent = `${clockAt(currentTrip, bounds.from)} às ${clockAt(currentTrip, bounds.to)}`;
+        $('route-summary').textContent = `${TripModel.formatDuration(seconds)} e ${formatNumber((tripKm[bounds.to] || 0) - (tripKm[bounds.from] || 0), 1)} km`;
+    } else {
+        $('route-range').textContent = 'Nenhum trecho marcado';
+        $('route-summary').textContent = 'Marque o início e o fim para rever ou exportar um trecho. Atalhos: I e O.';
+    }
+    layoutSelection();
+    if (mapLayers.selection) {
+        tripLayer.removeLayer(mapLayers.selection);
+        mapLayers.selection = null;
+    }
+    if (hasRange) {
+        mapLayers.selection = L.polyline(routeLatLngs.slice(bounds.from, bounds.to + 1), {interactive: false, weight: 9, opacity: .5, lineCap: 'round', lineJoin: 'round', color: mapColors().blue}).addTo(tripLayer);
+        mapLayers.vehicle.bringToFront();
+    }
+}
+
+function markRoutePoint(which) {
+    if (!currentTrip) return;
+    if (which === 'start') routeStart = playIndex;
+    else routeEnd = playIndex;
+    if (routeStart !== null && routeEnd !== null && routeStart > routeEnd) [routeStart, routeEnd] = [routeEnd, routeStart];
+    updateRouteSelection();
+}
+
+function clearRoute() {
+    routeStart = null;
+    routeEnd = null;
+    updateRouteSelection();
+}
+
+/* alças da seleção: nunca se cruzam */
+function setRouteHandle(which, index) {
+    const last = currentTrip.points.length - 1;
+    let value = Math.max(0, Math.min(last, index));
+    if (which === 'start' && routeEnd !== null) value = Math.min(value, routeEnd - 1);
+    if (which === 'end' && routeStart !== null) value = Math.max(value, routeStart + 1);
+    if (which === 'start') routeStart = Math.max(0, value);
+    else routeEnd = Math.min(last, value);
+    updateRouteSelection();
+}
+
+function exportRoute(format) {
+    const message = $('route-message');
+    if (routeStart === null || routeEnd === null || routeStart === routeEnd) {
+        message.textContent = 'Marque dois pontos diferentes (início e fim) para definir o trecho.';
+        return;
+    }
+    const bounds = routeBounds();
+    const points = currentTrip.points.slice(bounds.from, bounds.to + 1);
+    const text = format === 'gpx' ? TripModel.buildGpx(points) : TripModel.buildKml(points);
+    const stamp = index => clockAt(currentTrip, index).slice(0, 5).replace(':', '');
+    const name = `trecho-${currentTrip.id}-${stamp(bounds.from)}-${stamp(bounds.to)}.${format}`;
+    const url = URL.createObjectURL(new Blob([text], {type: 'application/xml'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message.textContent = `Trecho exportado: ${name}`;
+}
+
+function wireSelectionHandles() {
+    [['sel-start', 'start'], ['sel-end', 'end']].forEach(([id, which]) => {
+        const handle = $(id);
+        let dragging = false;
+        handle.addEventListener('pointerdown', event => {
+            dragging = true;
+            handle.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        handle.addEventListener('pointermove', event => { if (dragging && timeline) setRouteHandle(which, indexFromPointer(event)); });
+        const stop = () => { dragging = false; };
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+        handle.addEventListener('keydown', event => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            event.stopPropagation();
+            const bounds = routeBounds();
+            if (!bounds) return;
+            const direction = event.key === 'ArrowLeft' ? -1 : 1;
+            const current = which === 'start' ? bounds.from : bounds.to;
+            const seconds = TripModel.elapsedAt(currentTrip, current) + direction * (event.shiftKey ? 10 : 1);
+            let index = TripModel.indexAtElapsed(currentTrip, seconds);
+            if (index === current) index += direction;
+            setRouteHandle(which, index);
+        });
+    });
+}
+
+/* ---------- coordenada ---------- */
+function setMapCoordinate(lat, lon) {
+    const coordinate = `${TripModel.decimalToDms(lat, 'lat')}, ${TripModel.decimalToDms(lon, 'lon')}`;
+    $('map-coordinate-value').textContent = coordinate;
+    $('copy-map-coordinate').dataset.coordinate = coordinate;
+    $('copy-map-coordinate-label').textContent = 'Copiar';
+    $('coord-bar').hidden = false;
+}
+
+function resetMapCoordinate() {
+    $('coord-bar').hidden = true;
+    delete $('copy-map-coordinate').dataset.coordinate;
+}
+
+async function copyMapCoordinate() {
+    const button = $('copy-map-coordinate');
+    if (!button.dataset.coordinate) return;
+    const copied = await copyText(button.dataset.coordinate);
+    $('copy-map-coordinate-label').textContent = copied ? 'Copiado!' : 'Não foi possível copiar. Selecione o texto.';
+    setTimeout(() => { $('copy-map-coordinate-label').textContent = 'Copiar'; }, 2500);
+}
+
+function copyCurrentCoordinate() {
+    if (!currentTrip) return;
+    const point = currentTrip.points[playIndex];
+    setMapCoordinate(point[0], point[1]);
+    closePopovers();
+    copyMapCoordinate();
+}
+
+/* ---------- qualidade dos dados ---------- */
+function qualityFor(trip) {
+    const sync = trip.video_sync;
+    if (!sync || sync.status === 'unavailable') {
+        return {label: 'Sem sincronização fina', tone: 'none', tip: 'Posição estimada pela duração do vídeo.'};
+    }
+    const confidenceNote = syncConfidenceWarning(sync);
+    const partialNote = sync.status === 'partial' ? 'Alguns trechos não têm vídeo correspondente ao GPS.' : '';
+    const tip = [partialNote, confidenceNote].filter(Boolean).join(' ');
+    if (sync.confidence === 'low') return {label: 'Sincronização incerta', tone: 'warn', tip};
+    if (sync.confidence === 'medium') return {label: 'Sincronização aproximada', tone: 'warn', tip};
+    if (sync.status === 'partial') return {label: 'Sincronização parcial', tone: 'warn', tip};
+    return {label: 'Vídeo e GPS alinhados', tone: 'ok', tip: 'A posição no mapa acompanha o vídeo segundo a segundo.'};
+}
+
+function renderTechDetails(trip) {
+    const sync = trip.video_sync;
+    const rows = [
+        ['Vídeo dianteiro', trip.video_front || 'sem arquivo'],
+        ['Vídeo traseiro', trip.video_rear || 'sem arquivo'],
+        ['Situação do vídeo', trip.video_status || 'desconhecida'],
+        ['Observações', trip.video_notes || 'nenhuma'],
+        ['Pontos de GPS', formatNumber(trip.points.length)],
+        ['Duração do vídeo', trip.video_duration_s ? `${formatElapsed(trip.video_duration_s)} (GPS: ${formatElapsed(trip.duration_min * 60)})` : 'não informada'],
+        ['Calibração do relógio', sync ? `confiança ${sync.confidence || 'não informada'}, variação típica de ${Number.isFinite(sync.offset_typical_spread_s) ? formatNumber(sync.offset_typical_spread_s, 1) + ' s' : 'não informada'}` : 'sem calibração']
+    ];
+    const list = document.createElement('dl');
+    rows.forEach(([term, value]) => {
+        const dt = document.createElement('dt');
+        const dd = document.createElement('dd');
+        dt.textContent = term;
+        dd.textContent = value;
+        list.append(dt, dd);
+    });
+    $('tech-details').replaceChildren(list);
+}
+
+function togglePanel(button, panel) {
+    const open = panel.hidden;
+    panel.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+}
+
 /* ---------- viagem atual ---------- */
 function selectTrip(index, updateHash = true) {
     tripIndex = index;
@@ -1191,6 +1492,9 @@ function selectTrip(index, updateHash = true) {
     renderChapters(TripModel.deriveChapters(currentTrip));
     renderTripPicker();
     renderTimeline();
+    renderTechDetails(currentTrip);
+    resetMapCoordinate();
+    updateRouteSelection();
     drawDone(0);
     if (updateHash) location.hash = 'viagem-' + currentTrip.id;
 }
@@ -1240,6 +1544,19 @@ function wireControls() {
     document.querySelectorAll('[data-rate]').forEach(button => button.addEventListener('click', () => setRate(Number(button.dataset.rate))));
     document.addEventListener('keydown', handleShortcut);
     wireTimeline();
+    wireSelectionHandles();
+    setupPopover($('more-button'), $('more-popover'));
+    setupPopover($('route-chip'), $('route-popover'));
+    $('tech-toggle').addEventListener('click', () => togglePanel($('tech-toggle'), $('tech-details')));
+    $('keys-toggle').addEventListener('click', () => togglePanel($('keys-toggle'), $('keys-help')));
+    $('copy-current-coordinate').addEventListener('click', copyCurrentCoordinate);
+    $('copy-map-coordinate').addEventListener('click', copyMapCoordinate);
+    $('route-mark-start').addEventListener('click', () => markRoutePoint('start'));
+    $('route-mark-end').addEventListener('click', () => markRoutePoint('end'));
+    $('route-gpx').addEventListener('click', () => exportRoute('gpx'));
+    $('route-kml').addEventListener('click', () => exportRoute('kml'));
+    $('route-clear').addEventListener('click', clearRoute);
+    $('quality-pill').addEventListener('click', () => $('quality-wrap').classList.toggle('show'));
     $('map-follow').addEventListener('click', toggleFollow);
     $('map-fit').addEventListener('click', () => {
         followVehicle = false;
