@@ -63,6 +63,9 @@ const cases = {
         assert.ok(nums[nums.length - 2] > nums[0]);   // termina a leste (à direita)
         assert.ok(nums[nums.length - 1] < nums[1]);   // e ao norte (acima)
         assert.ok((d.match(/L/g) || []).length <= 9);
+        assert.ok(!/NaN|Infinity/.test(M.routeThumbPath([[0, 0], [0, 1]], 100, 50, 10)));  // linha reta leste-oeste
+        assert.ok(!/NaN|Infinity/.test(M.routeThumbPath([[1, 1]], 100, 50, 10)));          // ponto único
+        assert.ok((M.routeThumbPath(Array.from({length: 1000}, (_, i) => [i * 0.001, i * 0.001]), 100, 50, 60).match(/[ML]/g) || []).length <= 60);
 
         assert.strictEqual(M.decimalToDms(-27.565393, 'lat'), `27° 33' 55.41" S`);
         assert.strictEqual(M.decimalToDms(-48.51551, 'lon'), `48° 30' 55.84" W`);
