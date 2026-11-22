@@ -8,6 +8,7 @@ import os
 import json
 import glob
 import threading
+from src.extraction.video_timeline import build_video_sync
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -68,6 +69,7 @@ def process_group(group_idx, group, total_groups, inner_executor):
     all_points = []
     for tar_path in group:
         all_points.extend(extract_gps_from_tar(tar_path))
+    all_points.sort(key=lambda point: point['timestamp'])
 
     if not all_points:
         locked_print(f"  [{group_id}] ⚠️  SKIP: no GPS data")
@@ -200,14 +202,19 @@ def process_group(group_idx, group, total_groups, inner_executor):
         locked_print(f"  [{group_id}] ⚠️  No videos found, but GPS data is valid")
 
     # ========== Build result dict ==========
-    end_date = start_utc + timedelta(minutes=stats['duration_min'])
-    label = f"{start_utc.strftime('%b %d')} {start_utc.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
+    start_local = all_points[0]['timestamp'].replace(tzinfo=timezone.utc).astimezone()
+    end_local = all_points[-1]['timestamp'].replace(tzinfo=timezone.utc).astimezone()
+    label = f"{start_local.strftime('%d/%m %H:%M')} → {end_local.strftime('%d/%m %H:%M')}"
+    date_str = start_local.date().isoformat()
+    stats['duration_min'] = round((all_points[-1]['timestamp'] - all_points[0]['timestamp']).total_seconds() / 60, 1)
 
     locked_print(f"  [{group_id}] ✅ Done")
 
     # Build video paths based on merge success
     video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
     video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
+    video_sync = build_video_sync(all_points, rear_videos if rear_ok else [],
+                                  front_videos if front_ok else [], extract_video_duration)
 
     # Add idle segment detection
     idle_segments = detect_idle_segments(all_points)
@@ -283,6 +290,7 @@ def process_group(group_idx, group, total_groups, inner_executor):
         'start_timestamp': start_timestamp,
         'gps_points_count': len(all_points),
         'video_duration_status': video_duration_status,
+        'video_sync': video_sync,
         'sparse_timestamps': sparse_timestamps
     }, group_merge_info
 

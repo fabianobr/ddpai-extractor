@@ -7,7 +7,7 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
 - **GPS Extraction** — Parse NMEA sentences ($GPRMC, $GPGGA) from TAR archives
 - **Trip Detection** — Automatically group consecutive recordings by 30-minute gap threshold
 - **Trip Validation** — Check speed > 0 km/h, altitude coverage, and matching video counts
-- **Video Merging** — Concatenate rear/front videos with H.264 720p re-encoding (70% size reduction)
+- **Video Merging** — Concatenate rear/front videos using stream copy, with H.264 re-encoding as a fallback
 - **Interactive Dashboard** — Web UI with Leaflet.js maps, Chart.js speed/altitude graphs, and linked video players
 - **Parallel Build** — Optional 2.5–3.5× speedup for long archives
 
@@ -24,6 +24,30 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
 
 ## Quick Start
 
+### Importar viagens do disco DDPAI
+
+Conecte o disco e execute `python3 -m src.processing.trip_import`. O programa
+procura o disco, mostra as viagens de ontem no horário local e permite escolher
+uma, várias ou todas. Em seguida, gera o índice e os vídeos dianteiro e traseiro
+em `data/trips.json` e `merged_videos/`. Antes de substituir o índice anterior,
+salva uma cópia em `working_data/backups/`.
+
+Para outra data ou para processar todas sem perguntar:
+
+```bash
+python3 -m src.processing.trip_import --data 2026-11-21 --todas
+python3 -m src.processing.trip_import --disco /caminho/do/disco
+```
+
+Viagens que atravessam a meia-noite são incluídas inteiras. A detecção usa GPS
+e descarta arquivos classificados como parados ou sem dados GPS. Depois, abra
+o painel com `./run.sh` e acesse http://localhost:8765/web/.
+
+Se a porta 8765 estiver ocupada, use outra, por exemplo `./run.sh 8766`, e
+acesse http://localhost:8766/web/. O servidor aceita requisições parciais,
+necessárias para avançar nos vídeos. Os vídeos unidos preservam o codec original
+quando possível; a reprodução de HEVC depende do navegador e do sistema.
+
 ```bash
 git clone https://github.com/fabianobr/ddpai-extractor.git
 cd ddpai-extractor
@@ -31,10 +55,10 @@ cd ddpai-extractor
 # Build trip database (extracts GPS, detects trips, merges videos)
 ./build.sh
 
-# Start web server on localhost:8000
+# Start web server on localhost:8765
 ./run.sh
 
-# Open browser to http://localhost:8000/web/
+# Open browser to http://localhost:8765/web/
 ```
 
 ## Configuration
@@ -76,7 +100,7 @@ Merge RMC (speed/heading) + GGA (altitude)
   ↓ [validate_group]
 Validate: speed > 0, altitude, video counts
   ↓ [merge_videos_ffmpeg]
-Merge rear/front videos (H.264 720p)
+Merge rear/front videos (stream copy or H.264 fallback)
   ↓ [Write data/trips.json]
 JSON database (GPS points, stats, video paths)
   ↓ [web/index.html]
@@ -92,7 +116,7 @@ Browser: Leaflet map, Chart.js graphs, video players
 - **Real-time visualization:** See playback position on map with time indicator
 
 ### Usage
-1. Open dashboard: `./run.sh` → http://localhost:8000/web/
+1. Open dashboard: `./run.sh` → http://localhost:8765/web/
 2. Select a trip with video
 3. Use sync mode buttons: "🔗 Linked" or "🎬 Independent"
 4. Play video to see map follow playback
@@ -115,8 +139,34 @@ If `video_duration_status = "video_shorter"`:
 - **Frontend:** Event listeners sync video ↔ map; linear interpolation maps time to GPS index
 - **Data:** JSON schema includes `video_duration_s`, `start_timestamp`, `sparse_timestamps`
 
+### Per-camera mapping (`video_sync`)
+Each trip carries `video_sync` with one vector per camera (`rear`, `front`): for each GPS point, the second
+inside the merged video, or `null` when that camera has no footage for the point. The frontend uses these
+vectors instead of linear interpolation; trips without `video_sync` (older JSON) fall back to the old behaviour.
+
+- **Clock offset:** the GPS (UTC) and the camera clock differ (about 10 752 s in the Nov/2026 import). It is
+  estimated as the **median** of the per-segment offsets (first GPS fix of each file minus the file-name time).
+  This is an estimate, not a guarantee of absolute accuracy; resolution is limited to about 1 s by file names.
+- **Confidence:** `video_sync` also stores `offset_samples`, `offset_spread_s`, `offset_typical_spread_s`,
+  `offset_outlier_segments` and `confidence` (`high` / `medium` / `low`). `medium` and `low` show a warning in
+  the dashboard. The classification uses the typical spread (it ignores the worst 5 % of segments, set by
+  `OUTLIER_FRACTION` in `src/extraction/video_timeline.py`); set it to 0 for the strict max-deviation rule.
+  Confidence describes the clock calibration only, not footage coverage (see `status`: `ok` / `partial`).
+- **Stale GPS residue:** some `.gpx` files (the last short file of a recording) end with old fixes left in the
+  camera buffer. `extract_gps_from_nmea` stops at the first fix whose full date+time goes backwards or jumps
+  forward more than 120 s. Consequence: those fixes no longer count as driving, so a few `.git` files can be
+  classified as parked; `tools/refresh_video_sync.py` keeps the trip composition that was already imported and
+  merged, but a fresh import would leave them out. Point indices change when residue is removed, so ranges
+  selected or exported before a refresh no longer apply.
+- **GPX/KML export:** exports the geometry of the selected points only (no timestamps or elevation); it is not
+  a guaranteed navigable route in mapping apps.
+- **Refreshing without re-merging video:** `python3 tools/refresh_video_sync.py --disco <mount> [--dry-run]`
+  recomputes points and `video_sync` for the trips already imported; it backs up `data/trips.json` first and does
+  not touch `merged_videos/`.
+
 ### Testing
-- Unit tests: `pytest tests/test_video_sync_build.py`
+- Unit tests: `python3 -m unittest discover -s tests -v`
+- Unit tests (legacy): `pytest tests/test_video_sync_build.py`
 - Manual testing: Follow guide in `tests/test_video_sync_frontend_manual.md`
 
 ## Data Structure
@@ -160,7 +210,7 @@ For faster processing on multi-core systems:
 ### Serve Dashboard
 ```bash
 ./run.sh
-# Starts HTTP server on localhost:8000 (requires for JSON fetch)
+# Starts HTTP server on localhost:8765 (requires for JSON fetch)
 ```
 
 ### Additional Tools

@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone, time, date
 from collections import defaultdict
 import time as time_module
+from src.extraction.video_timeline import build_video_sync
 
 # Default Configuration
 DEFAULT_WORKING_DIR = '/Users/fabianosilva/Documentos/code/ddpai_extractor/working_data/tar'
@@ -212,6 +213,7 @@ def parse_rmc(data):
 
         return {
             'time': time_str,
+            'date': data[8] if len(data) > 8 else None,
             'lat': lat,
             'lon': lon,
             'speed_knots': speed_knots,
@@ -342,10 +344,51 @@ def detect_idle_segments(points, speed_threshold=None, duration_threshold=None):
 
     return idle_segments
 
-def extract_gps_from_nmea(nmea_content):
-    """Extract GPS points from NMEA text."""
+# A .gpx covers about one minute of recording. Real fixes advance monotonically, so a
+# fix whose full timestamp (date + time) goes backwards, or jumps further than this
+# between consecutive fixes, is stale residue of the camera's old 307200-byte buffer
+# (duplicates of points that already exist, correct, in another segment). Everything
+# from the first such fix onwards is discarded. Backwards steps use no tolerance: real
+# fixes never go back, and this keeps the rule free of tuning. The forward limit is 2x
+# the file length, so late first fixes (+28 s seen) and short gaps are always kept.
+MAX_FIX_FORWARD_JUMP_S = 120
+
+
+def _rmc_stamp(point):
+    """Full UTC datetime of an RMC fix; None if the time or date is unusable."""
+    time_str = point.get('time') or ''
+    if len(time_str) < 6:
+        return None
+    try:
+        clock = time(int(time_str[0:2]), int(time_str[2:4]), int(time_str[4:6]))
+        rmc_date = point.get('date')
+        day = datetime.strptime(rmc_date, '%d%m%y').date() if rmc_date else date(1970, 1, 1)
+    except ValueError:
+        return None
+    return datetime.combine(day, clock), bool(rmc_date)
+
+
+def _is_stale_fix(previous, current):
+    """True when `current` cannot follow `previous` (backwards or absurd jump)."""
+    (before, before_dated), (now, now_dated) = previous, current
+    delta = (now - before).total_seconds()
+    if not (before_dated and now_dated):
+        # Without calendar dates a UTC midnight rollover looks like a 24 h step back.
+        delta = (delta + 43200) % 86400 - 43200
+    return delta < 0 or delta > MAX_FIX_FORWARD_JUMP_S
+
+
+def extract_gps_from_nmea(nmea_content, drop_stale=True):
+    """Extract GPS points from NMEA text.
+
+    Stops at the first fix whose full timestamp goes backwards or jumps absurdly
+    (stale buffer residue); the fixes before it are kept untouched. `drop_stale=False`
+    keeps the legacy behaviour (only tools/refresh_video_sync.py uses it, to reproduce
+    the membership of trips imported before this filter existed).
+    """
     rmc_points = {}  # keyed by time
     gga_points = {}  # keyed by time
+    last_stamp = None
 
     for line in nmea_content.split('\n'):
         line = line.strip()
@@ -361,6 +404,11 @@ def extract_gps_from_nmea(nmea_content):
         if sentence_type in ['GPRMC', 'GNRMC']:
             point = parse_rmc(parsed['data'])
             if point:
+                stamp = _rmc_stamp(point)
+                if stamp is not None:
+                    if drop_stale and last_stamp is not None and _is_stale_fix(last_stamp, stamp):
+                        break
+                    last_stamp = stamp
                 rmc_points[point['time']] = point
 
         elif sentence_type in ['GPGGA', 'GNGGA']:
@@ -402,8 +450,13 @@ def merge_gps_points(rmc_points, gga_points, tar_date=None):
                 hour = int(time_key[0:2])
                 minute = int(time_key[2:4])
                 second = int(time_key[4:6])
-                # Use actual date from tar_date parameter
-                timestamp = datetime.combine(tar_date, time(hour, minute, second))
+                # RMC carries the UTC calendar date; the camera filename uses its own clock.
+                rmc_date = rmc.get('date')
+                try:
+                    point_date = datetime.strptime(rmc_date, '%d%m%y').date() if rmc_date else tar_date
+                except ValueError:
+                    point_date = tar_date
+                timestamp = datetime.combine(point_date, time(hour, minute, second))
             else:
                 timestamp = None
         except (ValueError, IndexError):
@@ -420,7 +473,7 @@ def merge_gps_points(rmc_points, gga_points, tar_date=None):
 
     return sorted(points, key=lambda p: p['timestamp'])
 
-def extract_gps_from_tar(tar_path):
+def extract_gps_from_tar(tar_path, drop_stale=True):
     """Extract all GPS points from tar file."""
     points = []
 
@@ -441,9 +494,12 @@ def extract_gps_from_tar(tar_path):
                     f = tar.extractfile(member)
                     if f:
                         nmea_content = f.read().decode('utf-8', errors='ignore')
-                        rmc, gga = extract_gps_from_nmea(nmea_content)
+                        rmc, gga = extract_gps_from_nmea(nmea_content, drop_stale=drop_stale)
                         # Pass tar_date to merge_gps_points for correct timestamps
                         merged = merge_gps_points(rmc, gga, tar_date=tar_date)
+                        segment_name = os.path.basename(member.name).split('_')[0]
+                        for point in merged:
+                            point['camera_segment'] = segment_name
                         points.extend(merged)
     except Exception as e:
         pass
@@ -474,7 +530,7 @@ def parse_tar_filename(filename):
     except ValueError:
         return None, None
 
-def is_parking_file(tar_path):
+def is_parking_file(tar_path, drop_stale=True):
     """
     Hybrid parking detection: Classifies TAR file as parking or driving.
     Returns True if parking, False if driving.
@@ -485,7 +541,7 @@ def is_parking_file(tar_path):
     - Issue: File 18:01 BRT (0.57 km, 3.3 km/h) was wrongly classified as DRIVING
     - Fix: Increased both thresholds to catch edge cases during parking transitions
     """
-    points = extract_gps_from_tar(tar_path)
+    points = extract_gps_from_tar(tar_path, drop_stale=drop_stale)
     if not points or len(points) < 2:
         return True  # Assume parking if no GPS data
 
@@ -500,7 +556,7 @@ def is_parking_file(tar_path):
     return is_parking
 
 
-def detect_trip_groups(tar_files, verbose=False):
+def detect_trip_groups(tar_files, verbose=False, drop_stale=True):
     """
     Detect trip groups using 30-minute gap threshold.
     Pre-filters parking files via is_parking_file() (distance < 0.6 km OR avg_speed < 3.0 km/h) before grouping.
@@ -520,7 +576,7 @@ def detect_trip_groups(tar_files, verbose=False):
             continue
 
         # Pre-filter: Skip parking files
-        if is_parking_file(tar_path):
+        if is_parking_file(tar_path, drop_stale=drop_stale):
             parking_files.append(tar_path)
             continue
 
@@ -1209,6 +1265,7 @@ def main():
         for tar_path in group:
             points = extract_gps_from_tar(tar_path)
             all_points.extend(points)
+        all_points.sort(key=lambda point: point['timestamp'])
 
         if not all_points:
             print(f"  ⚠️  Skipping group {group_id}: No GPS data extracted")
@@ -1341,11 +1398,13 @@ def main():
             video_notes = "No video files found for either camera"
             print(f"  ⚠️  No videos for group {group_id}, but GPS data is valid")
 
-        # Calculate time range
-        start_date = datetime.strptime(group_id, '%Y%m%d%H%M%S')
-        end_date = start_date + timedelta(minutes=stats['duration_min'])
-
-        label = f"{start_date.strftime('%b %d')} {start_date.strftime('%H:%M')} → {end_date.strftime('%H:%M')}"
+        # RMC timestamps are UTC; display the actual first/last GPS fixes in
+        # the host's local timezone rather than treating the camera clock as UTC.
+        start_date = all_points[0]['timestamp'].replace(tzinfo=timezone.utc).astimezone()
+        end_date = all_points[-1]['timestamp'].replace(tzinfo=timezone.utc).astimezone()
+        label = f"{start_date.strftime('%d/%m %H:%M')} → {end_date.strftime('%d/%m %H:%M')}"
+        date_str = start_date.date().isoformat()
+        stats['duration_min'] = round((all_points[-1]['timestamp'] - all_points[0]['timestamp']).total_seconds() / 60, 1)
 
         # Prepare points for database: [lat, lon, speed_kmh, altitude, heading, time_offset_s]
         trip_start = all_points[0]['timestamp'] if all_points else None
@@ -1358,6 +1417,14 @@ def main():
         # Build video paths based on merge success
         video_rear_path = f'merged_videos/{group_id}_rear.mp4' if rear_ok else None
         video_front_path = f'merged_videos/{group_id}_front.mp4' if front_ok else None
+
+        # Compute an explicit mapping for each camera. Filename timestamps use
+        # the camera clock, while RMC dates/times use the GPS clock; concatenation
+        # removes recording gaps, so elapsed GPS time alone cannot be used.
+        video_sync = build_video_sync(all_points,
+                                      rear_videos if rear_ok else [],
+                                      front_videos if front_ok else [],
+                                      extract_video_duration)
 
         # Add idle segment detection
         idle_segments = detect_idle_segments(all_points)
@@ -1429,6 +1496,7 @@ def main():
             'start_timestamp': start_timestamp,
             'gps_points_count': len(all_points),
             'video_duration_status': video_duration_status,
+            'video_sync': video_sync,
             'sparse_timestamps': sparse_timestamps
         })
 
