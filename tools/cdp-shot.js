@@ -40,7 +40,7 @@ async function main() {
     '--no-first-run',
     '--no-default-browser-check',
     'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: 'ignore', detached: true });
   let chromeError = null;
   chrome.on('error', (err) => { chromeError = err; });
   const chromeExited = new Promise((resolve) => chrome.on('exit', resolve));
@@ -93,10 +93,20 @@ async function main() {
     fs.writeFileSync(out, Buffer.from(shot.data, 'base64'));
     ws.close();
   } finally {
-    chrome.kill();
-    // Chrome keeps writing to the profile while it shuts down; wait for it before deleting.
+    // Chrome is detached, so it leads its own process group: signal the whole group so that
+    // renderer/GPU/crashpad children stop writing to the profile too.
+    try { process.kill(-chrome.pid, 'SIGTERM'); } catch {}
     await Promise.race([chromeExited, sleep(5000)]);
-    fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    if (chrome.exitCode === null && chrome.signalCode === null) {
+      try { process.kill(-chrome.pid, 'SIGKILL'); } catch {}
+      await Promise.race([chromeExited, sleep(2000)]);
+    }
+    // Best-effort: the screenshot already succeeded, so a leftover profile must not change the exit code.
+    try {
+      fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch {
+      console.error(`cdp-shot: aviso: não consegui apagar ${profileDir}`);
+    }
   }
 }
 
