@@ -53,7 +53,7 @@ html, body { margin: 0; }
 body { background: var(--paper); color: var(--ink); font: 400 15px/1.45 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
 button, input { font: inherit; color: inherit; }
 /* números e horários na grotesca: o zero cortado da Atkinson fica só no texto corrido */
-.clock span, .dstats b, .now b, .chlist time, .axis, .coordbar span, .badge, .trip-item .meta, .chip { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
+.clock span, .dstats b, .readouts b, .chlist time, .axis, .coordbar span, .badge, .trip-item .meta, .chip { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
 :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -170,6 +170,46 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
 /* ---------- barra da história ---------- */
 .story { background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); padding: 10px 22px 12px; }
 .trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tc { display: flex; align-items: center; gap: 4px; }
+.tb { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.tb:hover { background: var(--card-2); }
+.tb .i { width: 23px; height: 23px; }
+.tb.play { width: 48px; height: 48px; background: var(--yellow); color: var(--yellow-ink); }
+.tb.play:hover { filter: brightness(1.05); background: var(--yellow); }
+.tb.play:disabled { background: var(--card-2); color: var(--ink-3); cursor: default; filter: none; }
+.tb.play .i { width: 21px; height: 21px; }
+.clock { display: grid; line-height: 1.1; }
+.clock b { font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.clock span { font-size: 13px; color: var(--ink-3); white-space: nowrap; min-height: 1.1em; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card-2); }
+.seg button { height: 30px; min-width: 40px; padding: 0 10px; border: 0; border-radius: 999px; background: none; cursor: pointer; font-weight: 700; font-size: 13.5px; color: var(--ink-2); }
+.seg button[aria-pressed=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.readouts { display: flex; gap: 18px; padding-left: 14px; border-left: 1px solid var(--line); }
+.readouts div { display: grid; line-height: 1.15; }
+.readouts b { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.readouts span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.timeline { position: relative; margin-top: 8px; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 8px; }
+.timeline svg { display: block; overflow: visible; }
+.timeline text { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 12px; fill: var(--ink-3); }
+.tl-base { fill: var(--line); }
+.tl-done { fill: var(--ink); }
+.tl-seg.climb, .tl-seg.descent { fill: var(--green); }
+.tl-seg.stop { fill: var(--blue); }
+.tl-seg.gap { fill: url(#tl-hatch); }
+.tl-seg { opacity: .85; }
+.tl-stn { fill: var(--card); stroke: var(--ink); stroke-width: 3; }
+.tl-st { cursor: pointer; }
+.tl-st rect { fill: var(--card); stroke: var(--line); }
+.tl-st:hover rect { stroke: var(--ink-3); }
+.tl-st text { fill: var(--ink); font-size: 13px; font-weight: 700; }
+.tl-ic { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--ink-3); }
+.tl-st[data-type=max] .tl-ic { color: var(--red); } .tl-st[data-type=stop] .tl-ic { color: var(--blue); } .tl-st[data-type=climb] .tl-ic, .tl-st[data-type=descent] .tl-ic { color: var(--green); } .tl-st[data-type=gap] .tl-ic { color: var(--gapc); }
+.tl-sp-a { fill: var(--ink); opacity: .08; } .tl-sp-l { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-linejoin: round; }
+.tl-al-a { fill: var(--green); opacity: .12; } .tl-al-l { fill: none; stroke: var(--green); stroke-width: 1.5; stroke-linejoin: round; }
+.tl-tick { stroke: var(--line); stroke-width: 1; }
+.tl-play { pointer-events: none; }
+.tl-play rect { fill: var(--yellow); stroke: rgba(0, 0, 0, .15); stroke-width: 1; }
+.tl-play circle { fill: var(--yellow); stroke: var(--card); stroke-width: 3; }
 .lock { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink-2); }
 .lock[aria-pressed=false] { background: var(--yellow-soft); color: var(--ink); border-color: transparent; }
 .lock .i { width: 17px; height: 17px; }
@@ -191,6 +231,9 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
   .main { display: contents; }
   .stagebox { order: 2; aspect-ratio: 16 / 9; width: 100%; border-radius: 14px; }
   .story { order: 3; padding: 10px 14px 12px; }
+  .trow { gap: 10px; }
+  .clock b { font-size: 22px; }
+  .readouts { order: 6; flex-basis: 100%; border: 0; padding: 0; justify-content: space-between; }
   .mapcard { order: 4; height: 300px; }
   .chapters { order: 5; overflow: visible; }
   .main.map-big .mapcard { height: 70vh; }
@@ -332,9 +375,26 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
 
   <section class="story" aria-label="Reprodução e linha do tempo">
     <div class="trow">
+      <div class="tc">
+        <button type="button" class="tb" id="back10" aria-label="Voltar 10 segundos" title="Voltar 10 s (←)"><svg class="i" aria-hidden="true"><use href="#i-back10"/></svg></button>
+        <button type="button" class="tb play" id="play" aria-label="Reproduzir" title="Reproduzir (espaço)"><svg class="i" aria-hidden="true"><use id="play-icon" href="#i-play"/></svg></button>
+        <button type="button" class="tb" id="fwd10" aria-label="Avançar 10 segundos" title="Avançar 10 s (→)"><svg class="i" aria-hidden="true"><use href="#i-fwd10"/></svg></button>
+      </div>
+      <div class="clock"><b id="clock">--:--:--</b><span id="elapsed"></span></div>
+      <div class="seg" role="group" aria-label="Velocidade de reprodução">
+        <button type="button" data-rate="1" aria-pressed="true">1×</button>
+        <button type="button" data-rate="2" aria-pressed="false">2×</button>
+        <button type="button" data-rate="4" aria-pressed="false">4×</button>
+      </div>
+      <div class="readouts" role="group" aria-label="Leituras do ponto atual">
+        <div><b id="now-speed">–</b><span>velocidade</span></div>
+        <div><b id="now-alt">–</b><span>altitude</span></div>
+        <div><b id="now-km">–</b><span id="now-km-of">percorridos</span></div>
+      </div>
       <div class="grow"></div>
       <button type="button" class="lock" id="sync-lock" aria-pressed="true"><svg class="i" aria-hidden="true"><use id="sync-lock-icon" href="#i-lock"/></svg><span class="sr" id="sync-lock-label">Câmeras juntas</span></button>
     </div>
+    <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
   </section>
 </div>
 
@@ -346,6 +406,7 @@ const CAMERAS = ['front', 'rear'];
 const CAMERA_NAMES = {front: 'dianteira', rear: 'traseira'};
 const CHAPTER_ICONS = {start: 'flag', end: 'finish', stop: 'stop', max: 'gauge', climb: 'climb', descent: 'descent', gap: 'nofilm'};
 const DONE_REDRAW_MS = 250;
+const TL = {padL: 52, padR: 14, stations: 28, line: 32, speed: 54, speedH: 34, alt: 92, altH: 22, axis: 120, height: 138};
 
 let trips = [];
 let currentTrip = null;
@@ -355,6 +416,10 @@ let currentRate = 1;
 let layoutMode = 'pip';      // 'pip' ou 'side'
 let followVehicle = false;
 let lastChapter = -1;
+let tripKm = [];             // km acumulados, calculados uma vez por viagem
+let timeline = null;         // geometria da linha do tempo desenhada
+let scrubbing = false;
+let routeStart = null, routeEnd = null;
 let routeLatLngs = [];
 let map = null, tileLayer = null, tripLayer = null;
 const mapLayers = {};
@@ -633,6 +698,7 @@ function swapCamera() {
     if (!hasVideo(other)) return;
     syncState.activeVideo = other;
     updateLayoutButtons();
+    updatePlayButton();
 }
 
 function toggleSideBySide() {
@@ -813,6 +879,21 @@ function updatePlayhead(index) {
     if (!currentTrip || !currentTrip.points[index]) return;
     playIndex = index;
     const point = currentTrip.points[index];
+    const elapsed = TripModel.elapsedAt(currentTrip, index);
+    const total = timeline ? timeline.total : 1;
+    const clock = clockAt(currentTrip, index);
+    $('clock').textContent = clock;
+    $('elapsed').textContent = `${formatElapsed(elapsed)} de ${formatElapsed(total)}`;
+    $('now-speed').textContent = `${formatNumber(point[2])} km/h`;
+    $('now-alt').textContent = `${formatNumber(point[3])} m`;
+    $('now-km').textContent = `${formatNumber(tripKm[index] || 0, 1)} km`;
+    $('timeline').setAttribute('aria-valuenow', String(index));
+    $('timeline').setAttribute('aria-valuetext', `${clock}, ${formatElapsed(elapsed)} de viagem, ${formatNumber(point[2])} km/h`);
+    if (timeline) {
+        const x = timeline.xOf(index);
+        timeline.playhead.setAttribute('transform', `translate(${x} 0)`);
+        timeline.done.setAttribute('width', String(Math.max(0, x - TL.padL)));
+    }
     mapLayers.vehicle.setLatLng([point[0], point[1]]);
     if (followVehicle) map.panTo([point[0], point[1]], {animate: false});
     updateDone(index);
@@ -845,19 +926,271 @@ function seekToPoint(index) {
     updatePlayhead(index);
 }
 
+/* ---------- transporte ---------- */
+function updatePlayButton() {
+    const button = $('play');
+    const anyVideo = CAMERAS.some(hasVideo);
+    button.disabled = !anyVideo;
+    const playing = anyVideo && !cameraVideo(syncState.activeVideo).paused;
+    const label = !anyVideo ? 'Viagem sem vídeo' : playing ? 'Pausar' : 'Reproduzir';
+    button.setAttribute('aria-label', label);
+    button.title = !anyVideo ? label : `${label} (espaço)`;
+    $('play-icon').setAttribute('href', playing ? '#i-pause' : '#i-play');
+}
+
+function togglePlay() {
+    const video = cameraVideo(syncState.activeVideo);
+    if (!video.dataset.lazySrc) return;
+    if (!video.paused) {
+        video.pause();
+        return;
+    }
+    ensureVideoLoaded(video);
+    const started = video.play();
+    if (started && started.catch) started.catch(() => updatePlayButton());
+}
+
+function nudge(seconds) {
+    if (!currentTrip) return;
+    const target = TripModel.elapsedAt(currentTrip, playIndex) + seconds;
+    seekToPoint(TripModel.indexAtElapsed(currentTrip, target));
+}
+
+function setRate(rate) {
+    currentRate = rate;
+    CAMERAS.forEach(camera => {
+        // o navegador volta ao padrão ao carregar um arquivo novo: guardar nos dois
+        cameraVideo(camera).defaultPlaybackRate = rate;
+        cameraVideo(camera).playbackRate = rate;
+    });
+    document.querySelectorAll('[data-rate]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.rate) === rate)));
+}
+
+/* O vídeo da câmera principal comanda a posição; a outra só acompanha pelo `linkVideos`. */
+function onVideoTimeUpdate(event, camera) {
+    if (!currentTrip || scrubbing || syncState.isSyncing || camera !== syncState.activeVideo) return;
+    const time = event.target.currentTime;
+    const points = currentTrip.points;
+    const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
+    if (!gpsDuration || points.length === 0) return;
+    let index;
+    if (currentTrip.video_sync) {
+        index = pointAtVideoTime(currentTrip, camera, time);
+        if (index === null) {
+            setCameraFlag(camera, 'gap', true);
+            return;
+        }
+    } else if (points[0].length >= 6) {
+        index = TripModel.indexAtElapsed(currentTrip, time);
+    } else {
+        index = Math.max(0, Math.min(Math.floor((time / gpsDuration) * points.length), points.length - 1));
+    }
+    syncState.isSyncing = true;
+    syncState.lastUpdateSource = 'video';
+    updatePlayhead(index);
+    syncState.isSyncing = false;
+}
+
+function markRoutePoint(which) {
+    if (!currentTrip) return;
+    if (which === 'start') routeStart = playIndex;
+    else routeEnd = playIndex;
+}
+
+function handleShortcut(event) {
+    const target = event.target;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (key === ' ' && target.tagName === 'BUTTON') return;                // o botão focado age com o espaço
+    if (key !== 'Escape' && target.closest && target.closest('.pop')) return;  // setas e letras navegam dentro do popover
+    const step = event.shiftKey ? 60 : 10;
+    switch (key) {
+        case ' ': case 'k': event.preventDefault(); togglePlay(); break;
+        case 'j': case 'ArrowLeft': event.preventDefault(); nudge(-step); break;
+        case 'l': case 'ArrowRight': event.preventDefault(); nudge(step); break;
+        case 'i': markRoutePoint('start'); break;
+        case 'o': markRoutePoint('end'); break;
+        case 'm': toggleMapExpand(); break;
+        case 'c': swapCamera(); break;
+        case 'Escape': closePopovers(); break;
+        default: break;
+    }
+}
+
+/* ---------- linha do tempo ---------- */
+const svgEl = (tag, attrs = {}, parent = null) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.entries(attrs).forEach(([name, value]) => el.setAttribute(name, String(value)));
+    if (parent) parent.appendChild(el);
+    return el;
+};
+const round1 = value => Math.round(value * 10) / 10;
+
+/* "Parada 5 min", "140 km/h"... curto o bastante para caber na estação */
+function stationLabel(chapter) {
+    switch (chapter.type) {
+        case 'stop': return chapter.title.replace('Parada de', 'Parada');
+        case 'max': return chapter.title.replace('Velocidade máxima ', '');
+        case 'climb': return 'Subida';
+        case 'descent': return 'Descida';
+        case 'gap': return 'Sem vídeo';
+        default: return chapter.title;
+    }
+}
+
+function seriesPaths(xs, values, top, height, low, high) {
+    const range = Math.max(1e-6, high - low);
+    const pts = values.map((v, k) => `${round1(xs[k])},${round1(top + height - ((v - low) / range) * height)}`);
+    const base = round1(top + height);
+    return {
+        line: 'M' + pts.join(' L'),
+        area: `M${round1(xs[0])},${base} L${pts.join(' L')} L${round1(xs[xs.length - 1])},${base} Z`
+    };
+}
+
+function axisStepMinutes(totalSeconds, plotWidth) {
+    const steps = [1, 2, 5, 10, 15, 30, 60, 120, 240];
+    return steps.find(minutes => plotWidth / (totalSeconds / (minutes * 60)) >= 56) || 240;
+}
+
+function renderTimeline() {
+    const host = $('timeline');
+    host.textContent = '';
+    timeline = null;
+    if (!currentTrip) return;
+    const trip = currentTrip;
+    const n = trip.points.length;
+    const width = Math.max(320, Math.round(host.clientWidth));
+    const plotW = width - TL.padL - TL.padR;
+    const total = Math.max(1, TripModel.elapsedAt(trip, n - 1));
+    const xOf = index => TL.padL + Math.min(1, TripModel.elapsedAt(trip, index) / total) * plotW;
+    const svg = svgEl('svg', {width, height: TL.height, viewBox: `0 0 ${width} ${TL.height}`, 'aria-hidden': 'false', focusable: 'false'}, host);
+    const defs = svgEl('defs', {}, svg);
+    const hatch = svgEl('pattern', {id: 'tl-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'}, defs);
+    svgEl('line', {x1: 0, y1: 0, x2: 0, y2: 6, style: 'stroke:var(--gapc);stroke-width:3'}, hatch);
+
+    // linha de metrô: base, trechos, percorrido e estações
+    const lineY = TL.line + 7;
+    svgEl('rect', {class: 'tl-base', x: TL.padL, y: lineY - 3, width: plotW, height: 6, rx: 3}, svg);
+    const chapters = TripModel.deriveChapters(trip);
+    chapters.forEach(chapter => {
+        if (chapter.endIndex === undefined) return;
+        const x1 = xOf(chapter.index);
+        svgEl('rect', {class: `tl-seg ${chapter.type}`, x: x1, y: lineY - 4, width: Math.max(6, xOf(chapter.endIndex) - x1), height: 8, rx: 4}, svg);
+    });
+    const done = svgEl('rect', {class: 'tl-done', x: TL.padL, y: lineY - 3, width: 0, height: 6, rx: 3}, svg);
+    chapters.forEach(chapter => {
+        if (chapter.endIndex === undefined) svgEl('circle', {class: 'tl-stn', cx: xOf(chapter.index), cy: lineY, r: 6}, svg);
+    });
+
+    // estações: etiqueta completa, só ícone, ou nada quando falta espaço
+    let freeFrom = TL.padL - 10;
+    chapters.filter(chapter => chapter.type !== 'start' && chapter.type !== 'end').forEach(chapter => {
+        const label = stationLabel(chapter);
+        const cx = xOf(chapter.index);
+        const full = 7 + 15 + 5 + label.length * 7.4 + 10;
+        const wide = Math.min(Math.max(cx - full / 2, freeFrom + 4), width - full - 4);
+        const compact = Math.min(Math.max(cx - 14, freeFrom + 4), width - 32);
+        const useFull = wide >= freeFrom + 4 && wide + full <= width - 2;
+        const left = useFull ? wide : compact;
+        const w = useFull ? full : 28;
+        if (left < freeFrom + 3 || left + w > width) return;
+        freeFrom = left + w;
+        const group = svgEl('g', {class: 'tl-st', 'data-type': chapter.type, 'data-index': chapter.index, 'aria-hidden': 'true'}, svg);
+        svgEl('title', {}, group).textContent = chapter.title;
+        svgEl('rect', {x: left, y: 1, width: w, height: 26, rx: 13}, group);
+        svgEl('use', {class: 'tl-ic', href: `#i-${CHAPTER_ICONS[chapter.type]}`, x: left + 7, y: 6, width: 15, height: 15}, group);
+        if (useFull) svgEl('text', {x: left + 27, y: 18}, group).textContent = label;
+    });
+
+    // faixas de velocidade e altitude: no máximo ~600 amostras, posicionadas pelo horário real
+    const sampleXs = count => Array.from({length: count}, (_, k) => xOf(Math.min(n - 1, Math.floor((k + 0.5) * n / count))));
+    const speeds = TripModel.downsample(trip.points.map(p => p[2] || 0), 600, 'max');
+    const altitudes = TripModel.downsample(trip.points.map(p => p[3] || 0), 600, 'mean');
+    const maxSpeed = Math.max(60, ...speeds);
+    const minAlt = Math.min(...altitudes), maxAlt = Math.max(...altitudes);
+    const sp = seriesPaths(sampleXs(speeds.length), speeds, TL.speed, TL.speedH, 0, maxSpeed);
+    const al = seriesPaths(sampleXs(altitudes.length), altitudes, TL.alt, TL.altH, minAlt, Math.max(maxAlt, minAlt + 1));
+    svg.insertAdjacentHTML('beforeend',
+        `<g role="img" aria-label="Faixa de velocidade ao longo da viagem, máxima de ${formatNumber(Math.max(...speeds))} km/h">` +
+        `<path class="tl-sp-a" d="${sp.area}"/><path class="tl-sp-l" d="${sp.line}"/>` +
+        `<text x="${TL.padL - 8}" y="${TL.speed + TL.speedH / 2 + 4}" text-anchor="end">km/h</text></g>` +
+        `<g role="img" aria-label="Faixa de altitude ao longo da viagem, de ${formatNumber(minAlt)} m a ${formatNumber(maxAlt)} m">` +
+        `<path class="tl-al-a" d="${al.area}"/><path class="tl-al-l" d="${al.line}"/>` +
+        `<text x="${TL.padL - 8}" y="${TL.alt + TL.altH / 2 + 4}" text-anchor="end">altitude</text></g>`);
+
+    // eixo: horário real em passos redondos do relógio local
+    const startMsValue = startMs(trip);
+    const stepMs = axisStepMinutes(total, plotW) * 60000;
+    if (startMsValue !== null) {
+        const zone = -new Date(startMsValue).getTimezoneOffset() * 60000;
+        for (let t = Math.ceil((startMsValue + zone) / stepMs) * stepMs - zone; t <= startMsValue + total * 1000; t += stepMs) {
+            const x = TL.padL + ((t - startMsValue) / 1000 / total) * plotW;
+            if (x < TL.padL + 18 || x > width - TL.padR - 18) continue;
+            svgEl('line', {class: 'tl-tick', x1: x, x2: x, y1: TL.axis - 4, y2: TL.axis}, svg);
+            svgEl('text', {x, y: TL.axis + 12, 'text-anchor': 'middle'}, svg).textContent = TripModel.formatClock(t).slice(0, 5);
+        }
+    }
+
+    const playhead = svgEl('g', {class: 'tl-play'}, svg);
+    svgEl('rect', {x: -1.5, y: TL.line + 14, width: 3, height: TL.axis - TL.line - 18, rx: 1.5}, playhead);
+    svgEl('circle', {cx: 0, cy: lineY, r: 8}, playhead);
+    timeline = {width, plotW, total, xOf, playhead, done};
+    host.setAttribute('aria-valuemax', String(Math.max(0, n - 1)));
+    updatePlayhead(playIndex);
+}
+
+function indexFromPointer(event) {
+    const box = $('timeline').getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - box.left - TL.padL) / timeline.plotW));
+    return TripModel.indexAtElapsed(currentTrip, fraction * timeline.total);
+}
+
+function wireTimeline() {
+    const host = $('timeline');
+    host.addEventListener('pointerdown', event => {
+        if (!timeline || event.button > 0) return;
+        const station = event.target.closest && event.target.closest('.tl-st');
+        scrubbing = true;
+        host.setPointerCapture(event.pointerId);
+        seekToPoint(station ? Number(station.dataset.index) : indexFromPointer(event));
+    });
+    host.addEventListener('pointermove', event => { if (scrubbing && timeline) seekToPoint(indexFromPointer(event)); });
+    const finish = () => { scrubbing = false; };
+    host.addEventListener('pointerup', finish);
+    host.addEventListener('pointercancel', finish);
+    host.addEventListener('keydown', event => {
+        if (event.key === 'Home') { event.preventDefault(); seekToPoint(0); }
+        if (event.key === 'End') { event.preventDefault(); seekToPoint(currentTrip.points.length - 1); }
+    });
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+        const width = Math.round(host.clientWidth);
+        if (width === lastWidth || !currentTrip) return;
+        lastWidth = width;
+        renderTimeline();
+    }).observe(host);
+}
+
 /* ---------- viagem atual ---------- */
 function selectTrip(index, updateHash = true) {
     tripIndex = index;
     currentTrip = trips[index];
     playIndex = 0;
+    routeStart = null;
+    routeEnd = null;
     syncState.activeVideo = 'front';
+    tripKm = TripModel.cumulativeKm(currentTrip.points);
     loadTripVideos(currentTrip);
     updateLayoutButtons();
+    updatePlayButton();
     drawRoute(currentTrip);
     renderHeader(currentTrip);
+    $('now-km-of').textContent = `de ${formatNumber(tripKm[tripKm.length - 1] || 0, 1)} km`;
     renderChapters(TripModel.deriveChapters(currentTrip));
     renderTripPicker();
-    updatePlayhead(0);
+    renderTimeline();
     drawDone(0);
     if (updateHash) location.hash = 'viagem-' + currentTrip.id;
 }
@@ -901,6 +1234,12 @@ function wireControls() {
         });
     });
     $('sync-lock').addEventListener('click', toggleSyncMode);
+    $('play').addEventListener('click', togglePlay);
+    $('back10').addEventListener('click', () => nudge(-10));
+    $('fwd10').addEventListener('click', () => nudge(10));
+    document.querySelectorAll('[data-rate]').forEach(button => button.addEventListener('click', () => setRate(Number(button.dataset.rate))));
+    document.addEventListener('keydown', handleShortcut);
+    wireTimeline();
     $('map-follow').addEventListener('click', toggleFollow);
     $('map-fit').addEventListener('click', () => {
         followVehicle = false;
@@ -937,6 +1276,8 @@ async function init() {
     CAMERAS.forEach(camera => {
         const video = cameraVideo(camera);
         video.addEventListener('playing', () => hideLoading(video));
+        video.addEventListener('timeupdate', event => onVideoTimeUpdate(event, camera));
+        ['play', 'pause', 'ended'].forEach(name => video.addEventListener(name, updatePlayButton));
         video.addEventListener('loadeddata', () => { hideLoading(video); setCameraFlag(camera, 'error', false); });
         video.addEventListener('error', () => {
             if (!video.hasAttribute('src')) return;
