@@ -105,6 +105,41 @@ const cases = {
         const legacy = {points: [[0, 0, 10, 5, 0], [0, 0.001, 20, 5, 0], [0, 0.002, 15, 5, 0]], duration_min: 1};
         assert.deepStrictEqual(M.deriveChapters(legacy).map((c) => c.type), ['start', 'max', 'end']);
     },
+
+    fixes() {
+        // nudgeIndex: pontos 0..9 s, lacuna de 100 s, depois 110..113 s
+        const offs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 110, 111, 112, 113];
+        const trip = {duration_min: 3, points: offs.map((o) => [0, 0, 0, 0, 0, o])};
+        // caso normal: +10 s dentro de trecho contínuo
+        const dense = {duration_min: 1, points: Array.from({length: 40}, (_, i) => [0, 0, 0, 0, 0, i])};
+        assert.strictEqual(M.nudgeIndex(dense, 5, 10), 15);
+        assert.strictEqual(M.nudgeIndex(dense, 20, -10), 10);
+        // para frente junto de uma lacuna: avança um índice em vez de ficar parado
+        assert.strictEqual(M.nudgeIndex(trip, 9, 10), 10);
+        assert.strictEqual(M.nudgeIndex(trip, 8, 10), 9);
+        // para trás logo após a lacuna: recua um índice
+        assert.strictEqual(M.nudgeIndex(trip, 10, -10), 9);
+        // limites
+        assert.strictEqual(M.nudgeIndex(dense, 0, -10), 0);
+        assert.strictEqual(M.nudgeIndex(dense, 39, 10), 39);
+        assert.strictEqual(M.nudgeIndex(dense, 35, 10), 39);
+        assert.strictEqual(M.nudgeIndex(dense, 3, -10), 0);
+        assert.strictEqual(M.nudgeIndex({points: []}, 0, 10), 0);
+
+        // hasFineSync
+        const base = {points: offs.map((o) => [0, 0, 0, 0, 0, o]), video_front: 'f.mp4'};
+        assert.strictEqual(M.hasFineSync(base), false);
+        assert.strictEqual(M.hasFineSync({...base, video_sync: null}), false);
+        assert.strictEqual(M.hasFineSync({...base, video_sync: {status: 'unavailable', front: offs.map(() => null), rear: null}}), false);
+        assert.strictEqual(M.hasFineSync({...base, video_sync: {status: 'partial', front: offs.map((_, i) => i)}}), true);
+        assert.strictEqual(M.hasFineSync({...base, video_sync: {status: 'full', front: offs.map((_, i) => i)}}), true);
+
+        // cameraGaps não inventa lacuna quando a sincronização é indisponível
+        const unavailable = {...base, video_sync: {status: 'unavailable', front: offs.map(() => null), rear: null}};
+        assert.deepStrictEqual(M.cameraGaps(unavailable, 'front'), []);
+        const partial = {...base, video_sync: {status: 'partial', front: offs.map((_, i) => (i >= 2 && i <= 6 ? null : i))}};
+        assert.deepStrictEqual(M.cameraGaps(partial, 'front', 3), [{startIndex: 2, endIndex: 6}]);
+    },
 };
 
 const group = process.argv[2];

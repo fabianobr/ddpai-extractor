@@ -256,8 +256,26 @@
     const CLIMB_MIN_M = 250;
     const GAP_MIN_SECONDS = 30;
 
+    // Há mapeamento fino ponto -> vídeo? Falso sem video_sync ou com status 'unavailable'.
+    function hasFineSync(trip) {
+        const sync = trip && trip.video_sync;
+        return Boolean(sync) && sync.status !== 'unavailable';
+    }
+
+    // Índice resultante de avançar/recuar `seconds`; ao lado de uma lacuna de GPS
+    // (próximo ponto além da janela) anda ao menos um índice na direção pedida.
+    function nudgeIndex(trip, index, seconds) {
+        const n = trip.points.length;
+        if (n === 0) return 0;
+        const last = n - 1;
+        const next = indexAtElapsed(trip, elapsedAt(trip, index) + seconds);
+        const target = Math.max(0, Math.min(next, last));
+        if (target !== index || seconds === 0) return target;
+        return Math.max(0, Math.min(index + (seconds > 0 ? 1 : -1), last));
+    }
+
     function cameraGaps(trip, camera, minSeconds = GAP_MIN_SECONDS) {
-        if (!trip.video_sync || !trip['video_' + camera]) return [];
+        if (!hasFineSync(trip) || !trip['video_' + camera]) return [];
         const sync = trip.video_sync[camera];
         if (!sync) return [];
 
@@ -415,6 +433,8 @@
         buildGpx,
         buildKml,
         cameraGaps,
+        hasFineSync,
+        nudgeIndex,
         deriveChapters
     };
     

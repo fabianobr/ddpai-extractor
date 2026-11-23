@@ -20,3 +20,6 @@ class TestTripModel(unittest.TestCase):
 
     def test_chapters(self):
         r = run_group('chapters'); self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_fixes(self):
+        r = run_group('fixes'); self.assertEqual(r.returncode, 0, r.stderr)
