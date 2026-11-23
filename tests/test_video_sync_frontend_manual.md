@@ -19,12 +19,13 @@
 
 **Steps:**
 1. Select a trip with both rear and front videos
-2. Verify sync mode shows "🔗 Linked" (green button)
-3. Press Play on rear video
+2. Verify the sync padlock in the timeline bar shows "Câmeras juntas" (`aria-pressed=true`)
+3. Press Play (single transport control, or Space/K) on the main camera
 4. Observe:
    - [ ] Map marker appears and moves along polyline
    - [ ] Marker position matches video playback (within 1-2 seconds)
-   - [ ] Front video also plays automatically
+   - [ ] The playhead on the SVG timeline moves with the video
+   - [ ] The other camera also plays automatically
    - [ ] Both videos stay synchronized
 
 **Expected:** Smooth video playback with real-time map updates
@@ -35,7 +36,7 @@
 
 **Steps:**
 1. (From Scenario 1) Stop at any point in video
-2. Drag video progress bar to different time (e.g., 50% through)
+2. Drag the playhead on the timeline (or click the timeline) to a different time (e.g., 50% through)
 3. Observe:
    - [ ] Both videos jump to same position
    - [ ] Map marker jumps to corresponding GPS point
@@ -49,11 +50,11 @@
 
 **Steps:**
 1. (From Scenario 1) Pause videos
-2. Click a different point on the polyline (map)
+2. Click a different point on the polyline (map), or a chapter in the list
 3. Observe:
    - [ ] Both videos seek to corresponding time
    - [ ] Map marker appears at clicked location
-   - [ ] Time indicator shows current time
+   - [ ] Clock and elapsed time in the transport bar update
 
 **Expected:** Video seeks to clicked GPS point
 
@@ -63,16 +64,16 @@
 
 **Steps:**
 1. Start with Linked mode, both videos playing
-2. Click "🎬 Independent" button
+2. Click the sync padlock ("Câmeras separadas", `aria-pressed=false`)
 3. Observe:
    - [ ] Videos don't stop
-   - [ ] Button visual changes (color updates)
+   - [ ] Padlock visual changes (label and icon update)
    - [ ] localStorage updated (verify in DevTools)
-4. Pause rear video, continue playing front video
+4. Click "Trocar" (or press C) to make the other camera the main one, then pause the main camera and play the other
 5. Observe:
-   - [ ] Front video continues independently
-   - [ ] Rear video stays paused
-   - [ ] Map follows front video
+   - [ ] The newly main camera continues independently
+   - [ ] The other camera stays paused
+   - [ ] Map follows the main camera
 
 **Expected:** Smooth transition between modes
 
@@ -84,7 +85,7 @@
 1. Find a trip with `video_duration_status = "video_shorter"`
 2. Play video until it ends
 3. Observe:
-   - [ ] Yellow badge appears: "⚠️ Video ended at X:XX"
+   - [ ] The notice on the video (placa sobre o vídeo) appears when the camera has no footage in that stretch
    - [ ] Video freezes at last frame
    - [ ] Map marker can still be clicked in GPS-only area
    - [ ] Clicking beyond video end shows position but video stays frozen
@@ -98,8 +99,8 @@
 **Steps:**
 1. Find a trip with `video_duration_status = "no_video"`
 2. Observe:
-   - [ ] Video player shows: "❌ Rear video not available"
-   - [ ] Sync controls disabled (grayed out) if both videos missing
+   - [ ] Play is disabled with the text "Viagem sem vídeo"
+   - [ ] Chapters, map and timeline remain navigable
    - [ ] Map remains fully interactive
    - [ ] If other video available, it syncs independently
 
@@ -113,10 +114,9 @@
 1. Find a trip with idle_segments
 2. Play video through an idle segment
 3. Observe:
-   - [ ] Idle segment appears as dashed gray line on map
-   - [ ] Idle segment is not clickable (or clicking shows it's idle)
+   - [ ] Idle stretch appears as dashed gray line on map
+   - [ ] Idle stretch is shown as a hatched gap on the timeline
    - [ ] Video plays through idle normally
-   - [ ] Option to toggle idle visibility (if implemented)
 
 **Expected:** Idle segments handled gracefully
 

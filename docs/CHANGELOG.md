@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+
+### Changed
+- **Estúdio de viagem redesign**: the trip detail screen has chapters, a Leaflet map, an SVG metro-line timeline
+  for speed and altitude, a single transport bar with real clock, light/dark theme and keyboard shortcuts
+- **Chart.js removed**: the speed/altitude charts are inline SVG
+- **Map tiles**: OpenStreetMap with a per-theme CSS filter (CARTO dropped, it now requires an API key)
+
+### Added
+- `web/trip-model.js`: pure trip helpers, tested by `tests/test_trip_model.py`
+- `tools/cdp-shot.js`: exact-viewport PNG screenshots through headless Chrome
+- Design docs: use cases and user journey, three UX redesign options with prototypes
+  (`docs/ux/redesign-2026-11/`), trip detail design and plan
+
+### Fixed
+- ±10 s and arrow keys move across GPS gaps instead of getting stuck (`TripModel.nudgeIndex`)
+- Trips whose `video_sync` is `unavailable` fall back to elapsed-time mapping (`TripModel.hasFineSync`)
+- Side-by-side layout resets for trips with a single camera; swapping the main camera in independent mode
+  seeks it to the current point
+- Separate "GPS indisponível neste momento do vídeo" note instead of a false "sem gravação" note
+- Seeking into a stretch without footage of the main camera pauses both cameras (pre-existing)
+- Quality pill tooltip opens on click/tap again; big play button centered on the main camera
+
+### Documentation
+- `CLAUDE.md` rewritten to match the current code (code map, real input paths, video merging, new UI,
+  tests); personal trip data removed from tracked docs
+
 ## [0.5.0] - 2026-11-22
 
 ### Added

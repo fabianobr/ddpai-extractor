@@ -1,6 +1,6 @@
 # DDpai Z50 Pro Dashcam Extractor
 
-Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera. Automatically detects trips, validates data, and generates an interactive web dashboard with maps and real-time charts.
+Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera. Automatically detects trips, validates data, and generates an interactive trip detail screen with a map, a metro-line timeline and linked dashcam videos.
 
 ## Features
 
@@ -8,7 +8,7 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
 - **Trip Detection** — Automatically group consecutive recordings by 30-minute gap threshold
 - **Trip Validation** — Check speed > 0 km/h, altitude coverage, and matching video counts
 - **Video Merging** — Concatenate rear/front videos using stream copy, with H.264 re-encoding as a fallback
-- **Interactive Dashboard** — Web UI with Leaflet.js maps, Chart.js speed/altitude graphs, and linked video players
+- **Interactive Dashboard** — Trip detail screen ("Estúdio de viagem") with Leaflet.js map, chapters, an SVG metro-line timeline for speed/altitude, single transport controls and linked front/rear video
 - **Parallel Build** — Optional 2.5–3.5× speedup for long archives
 
 ## Requirements
@@ -19,7 +19,7 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
   # Verify FFmpeg installation
   ffmpeg -codecs | grep h264
   ```
-- **Modern browser** (Leaflet.js, Chart.js, HTML5 video)
+- **Modern browser** (Leaflet.js, inline SVG, HTML5 video)
 - **~15 GB disk space** for merged videos + source files
 
 ## Quick Start
@@ -63,22 +63,21 @@ cd ddpai-extractor
 
 ## Configuration
 
-### Video Paths
-Edit `src/extraction/build_database.py` lines 18–20 to point to your dashcam directories:
-```python
-REAR_VIDEO_DIR = '/path/to/your/rear/videos/'
-FRONT_VIDEO_DIR = '/path/to/your/front/videos/'
-TAR_ARCHIVE_DIR = '/path/to/your/tar/archives/'
+### Input Paths
+`./build.sh` takes the directories as positional arguments (defaults: `working_data/tar`, `working_data/videos/rear`, `working_data/videos/front`, output `.`):
+```bash
+./build.sh /path/to/tar /path/to/rear /path/to/front [OUTPUT_DIR]
 ```
+The `DEFAULT_*` constants in `src/extraction/build_database.py` are only used when the module is run directly without arguments, so prefer `build.sh` (or `trip_import`).
 
 ### Trip Detection
-Modify `GAP_THRESHOLD` in `src/extraction/build_database.py` (line 24, default: 1800 seconds = 30 minutes):
+Modify `GAP_THRESHOLD` in `src/extraction/build_database.py` (default: 1800 seconds = 30 minutes):
 ```python
 GAP_THRESHOLD = 30 * 60  # seconds between files to split trips
 ```
 
 ### Video Encoding
-Tune quality/speed tradeoffs in `src/extraction/build_database.py` lines 51–53:
+Tune the quality/speed of the libx264 fallback (stream copy, the default, ignores these) in `src/extraction/build_database.py` (near the top of the file):
 ```python
 OUTPUT_HEIGHT = 720        # Target resolution (default 720p)
 VIDEO_CRF = 26            # Quality: 18-22 (high), 26 (default), 28+ (compressed)
@@ -104,23 +103,41 @@ Merge rear/front videos (stream copy or H.264 fallback)
   ↓ [Write data/trips.json]
 JSON database (GPS points, stats, video paths)
   ↓ [web/index.html]
-Browser: Leaflet map, Chart.js graphs, video players
+Browser: Leaflet map, SVG timeline, video players
 ```
 
 ## Video-GPS Synchronization
 
 ### Features
 - **Bidirectional sync:** Play/scrub video → map updates | Click map → video seeks
-- **Switchable modes:** Linked (both videos together) or Independent (each syncs separately)
-- **Gap handling:** Gracefully handles when video is shorter/longer than GPS data
+- **Switchable modes:** lock button "Câmeras juntas" (both videos together) or "Câmeras separadas" (only the main camera follows the map/timeline); one main camera, the other as picture-in-picture or side by side
+- **Gap handling:** Cameras without footage for a GPS point show a "Sem gravação…" note and a "Sem vídeo" chapter; the map stays interactive
 - **Real-time visualization:** See playback position on map with time indicator
 
 ### Usage
 1. Open dashboard: `./run.sh` → http://localhost:8765/web/
 2. Select a trip with video
-3. Use sync mode buttons: "🔗 Linked" or "🎬 Independent"
+3. Use the sync padlock in the timeline bar: "Câmeras juntas" (locked) or "Câmeras separadas" (unlocked)
 4. Play video to see map follow playback
 5. Click map to jump video to that GPS point
+
+### Estúdio de viagem
+
+A tela de detalhe abre a viagem de `#viagem-<id>` (ou a mais recente). Os capítulos ficam em lista, a linha do
+tempo SVG mostra velocidade e altitude com o trecho selecionável, e o botão "Trocar" alterna a câmera principal.
+
+Atalhos de teclado (ignorados quando o foco está em campo de texto):
+
+| Tecla | Ação |
+|---|---|
+| Espaço / K | Reproduzir / pausar |
+| ← / → | Voltar / avançar 10 s |
+| Shift + ← / → | Voltar / avançar 60 s |
+| J / L | Voltar / avançar 10 s |
+| I / O | Marcar início / fim do trecho |
+| M | Ampliar o mapa (troca mapa e vídeo de lugar) |
+| C | Trocar a câmera principal |
+| Esc | Fechar popovers |
 
 ### Video Duration Validation
 During build, the system:
@@ -247,7 +264,7 @@ Web UI requires HTTP serving (not `file://` URLs). Use `./run.sh` to start the s
 The project gracefully ignores corrupted TAR files and bad NMEA checksums. Check build output for warnings.
 
 ### Video Playback Issues
-- Verify video paths in `src/extraction/build_database.py` lines 18–20 exist
+- Verify the video directories passed to `./build.sh` exist and that `data/trips.json` references `merged_videos/*.mp4` files that exist
 - Check browser DevTools Console for path errors
 - Ensure dashcam videos are in H.264/MP4 format
 
@@ -278,4 +295,4 @@ MIT License © 2026 Fabiano Silva. See [LICENSE](LICENSE) for details.
 - NMEA parsing for GPS data extraction
 - FFmpeg for video concatenation
 - [Leaflet.js](https://leafletjs.com/) for interactive maps
-- [Chart.js](https://www.chartjs.org/) for speed/altitude visualization
+- [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors for map tiles

@@ -4,37 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # DDpai Z50 Pro Dashcam Extractor
 
-## Project Status: ✅ REFACTORED (v3)
-
-Clean separation: GPS/trip extraction → JSON database, web UI loads data dynamically.
+Extracts GPS and trips from DDpai Z50 Pro dashcam archives into a JSON database (`data/trips.json`), merges the rear/front videos, and serves a static web UI ("Estúdio de viagem", Portuguese UI) that loads that JSON dynamically. Python standard library only; the frontend is plain HTML/JS (Leaflet from cdnjs, no Chart.js, no build step). The repo is **public**: never commit personal data (trip JSON, videos, photos, coordinates, places).
 
 ## Quick Start
 
 ```bash
-# Rebuild trip database from .git archives
-./build.sh
+./build.sh                  # TAR + videos -> data/trips.json + merged_videos/ (args: TAR REAR FRONT OUT)
+./run.sh [port]             # static server with Range support, http://127.0.0.1:8765/web/ (default port 8765)
+python3 -m unittest discover -s tests -v   # test suite
 
-# Start the web server on localhost:8765
-./run.sh
-
-# Open browser to http://localhost:8765/web/
-
-# Auto-watch SD card for new recordings (optional)
-./watch.sh             # Sequential build (default)
-./watch.sh --parallel  # Parallel build (2.5-3.5x faster)
+python3 -m src.processing.trip_import      # import trips of one day from a mounted DDPAI disk
+./watch.sh [--parallel]                    # macOS-only SD card watcher (see Input paths)
 ```
+
+`./run.sh` refuses to start without `data/trips.json`. The server binds to `127.0.0.1` only. Deep link to a trip: `/web/#viagem-<id>`.
 
 ## ⚠️ MUST DO: Development Workflow (Git Flow + TDD)
 
 **🔴 ALL changes to this project MUST follow this exact workflow — NO EXCEPTIONS:**
 
-1. **Branch:** Create a feature branch from `develop` (format: `feature/*`)
+1. **Branch:** Create a feature branch from `develop` (format: `feature/*`, `fix/*`, `docs/*` or `refactor/*`)
    - ✅ DO: `git checkout -b feature/video-sync-gps`
    - ❌ DON'T: Commit directly to main or develop
 
 2. **Test:** Write tests FIRST (Test-Driven Development)
-   - ✅ DO: Create `tests/` directory with test cases before implementation
-   - ✅ DO: Run tests locally: `pytest` or `bash tests/test_*.sh`
+   - ✅ DO: Add test cases under `tests/` before implementation
+   - ✅ DO: Run tests locally: `python3 -m unittest discover -s tests -v`
    - ❌ DON'T: Write code without tests
 
 3. **Code:** Implement changes, confirm all tests pass
@@ -88,329 +83,99 @@ Clean separation: GPS/trip extraction → JSON database, web UI loads data dynam
 - Save Mermaid code in design specs and commit to `docs/superpowers/specs/`
 - Renders automatically on GitHub (no external tools needed)
 
+
 ## Architecture & Workflow
 
-```
-.git TAR files (working_data/tar/)
-    ↓ [parse_tar_filename + detect_trip_groups]
-Auto-detect trip groups (30-min gap threshold)
-    ↓ [extract_gps_from_tar]
-Extract GPS from NMEA (.gpx files in TAR)
-    ↓ [merge_gps_points]
-Merge RMC (speed/heading) + GGA (altitude) data
-    ↓ [validate groups]
-Validate: speed > 0, altitude data, video counts match
-    ↓ [merge_videos_ffmpeg]
-Merge rear/front videos using FFmpeg (H.264 720p re-encoding)
-    ↓ [Write data/trips.json]
-Generate JSON database (GPS points, trip stats, video paths)
-    ↓ [web/index.html]
-Browser fetches JSON, renders map/charts/videos (Leaflet + Chart.js)
+```mermaid
+flowchart TD
+    A["*.git TAR archives (NMEA .gpx inside)"] --> B[parse_tar_filename + detect_trip_groups]
+    B --> C["extract_gps_from_tar -> merge_gps_points (RMC speed/heading + GGA altitude)"]
+    C --> D[validate_gps / validate_videos]
+    C --> E["build_video_sync (per-camera GPS point -> video second)"]
+    A --> F["merge_videos: ffmpeg concat, stream copy; libx264 720p fallback"]
+    D --> G[data/trips.json]
+    E --> G
+    F --> H["merged_videos/{trip_id}_rear|front.mp4"]
+    G --> I["web/index.html fetches JSON, renders map, timeline, videos"]
+    H --> I
 ```
 
-### Core Modules
+Trip id = UTC start of the first archive, `YYYYMMDDHHMMSS`. Input archives are named `YYYYMMDDHHMMSS_DURATION_SECONDS.git`.
 
-**src/extraction/build_database.py** (Main)
-- `parse_nmea_sentence()` / `parse_rmc()` / `parse_gga()`: NMEA sentence parsing
-- `extract_gps_from_tar()`: Reads .gpx NMEA data from TAR members
-- `detect_trip_groups()`: Groups consecutive .git files by 30-min gaps
-- `validate_group()`: Checks speed > 0, altitude coverage, video availability
-- `merge_videos()`: Concatenates rear/front videos with H.264 720p re-encoding (~70% size reduction)
-- Outputs: `data/trips.json` (GPS points, trip stats, video references)
+### Code map
 
-**src/extraction/build_database_parallel.py** (Parallel variant)
-- Same functions as build_database.py, parallel video encoding (2.5-3.5× speedup)
+- `src/extraction/build_database.py` (main, run via `./build.sh`): NMEA parsing (`parse_rmc`, `parse_gga`, `extract_gps_from_nmea`), `detect_trip_groups` (splits on `GAP_THRESHOLD`, pre-filters parking files with `is_parking_file`), `detect_idle_segments`, `compute_trip_stats`, `merge_videos`, `main()` writes `data/trips.json` and `data/merge_report.txt`.
+- `src/extraction/build_database_parallel.py`: same pipeline, groups merged in a thread pool (up to 4 groups x 2 cameras); **imports from `build_database`**, so shared logic and constants live only there. Run via `./tools/build_parallel.sh` (same positional args as `build.sh`).
+- `src/extraction/video_timeline.py`: `build_video_sync`, estimates the GPS (UTC) vs camera-clock offset (median per-segment offset) and maps each GPS point to a second in each merged video, with a `confidence` (`high`/`medium`/`low`).
+- `src/processing/trip_import.py`: interactive import from a mounted disk (auto-detects `/run/media/*/*`, `/media/*/*`, `/Volumes/*` having `DCIM/203gps/tar`); options `--disco PATH`, `--data AAAA-MM-DD` (default: yesterday, local time), `--todas`, `--substituir-indice-ilegivel`. Runs `build.sh` on a temporary copy and merges the result into `data/trips.json` (same-id trips replaced, others kept), backing up the old index to `working_data/backups/`.
+- `src/processing/http_server.py`: Range-capable static server used by `run.sh` (needed to seek in large videos).
+- `tools/refresh_video_sync.py --disco <mount> [--dry-run]`: recomputes points and `video_sync` for already-imported trips without re-merging video (backs up the index first).
+- `tools/extract_photos.sh`, `tools/cdp-shot.js` (headless-Chrome screenshot, Node 22+), `tools/debug_videos.sh`, `tools/install_fftools.sh`.
+- `src/processing/merge_trips.py`, `src/video/merge_videos.py`, `src/extraction/ddpai_route_improved.py`: legacy/standalone, rarely used; `merge_trips.py` and `tools/debug_videos.sh` still contain hardcoded macOS paths.
+- `web/index.html` (UI, CSS and app logic), `web/trip-model.js` (pure trip/point model, also loaded by Node tests), `web/video-sync.js` (point <-> video-time mapping, linked-player helpers, confidence warning).
 
-**web/index.html** (Frontend)
-- Fetches `data/trips.json` dynamically at page load
-- Renders interactive map (Leaflet.js), speed/altitude charts (Chart.js)
-- Displays trip selector, linked rear+front video players
-- All UI logic is client-side JavaScript
+### Input paths
 
-**Utilities**
-- **src/processing/merge_trips.py**: Standalone trip merging (rarely used)
-- **src/video/merge_videos.py**: Standalone FFmpeg wrapper (rarely used)
-- **src/extraction/ddpai_route_improved.py**: Original GPS extraction code (reference)
-- **tools/build_parallel.sh**: Parallel build entry point
-- **tools/debug_videos.sh**: Video debugging
-- **tools/install_fftools.sh**: FFmpeg helper
-
-### Data Sources
-
-**Input Paths** (configured in src/extraction/build_database.py)
-- `.git TAR files`: `working_data/tar/` (100 files, ~30 MB each)
-- Rear videos: `/Users/fabianosilva/dashcam/DCIM/200video/rear/`
-- Front videos: `/Users/fabianosilva/dashcam/DCIM/200video/front/`
-
-**Output Paths**
-- Database: `data/trips.json` (1.4 MB, auto-generated by ./build.sh)
-- Dashboard: `web/index.html` (14 KB static)
-- Merged videos: `merged_videos/` + `{trip_id}_rear.mp4` / `{trip_id}_front.mp4`
+- `./build.sh` / `tools/build_parallel.sh` default to `working_data/tar`, `working_data/videos/rear`, `working_data/videos/front` and output dir `.` (all gitignored; override with positional args). `LOCAL_SETUP.md` describes the author's local layout.
+- `src/extraction/build_database.py` has its own `DEFAULT_*` constants (lines 23-26) that are **hardcoded macOS paths of the original author**; they only apply if the module is run directly without arguments. Always go through `build.sh` or pass all four arguments.
+- `watch.sh` hardcodes `/Volumes/ddpai/DCIM/...` and uses `osascript` notifications: macOS only. On Linux use `trip_import`.
 
 ## Data Processing Details
 
-### Trip Detection
-- **GAP_THRESHOLD**: 30 minutes (seconds = 1800)
-- Parses `.git` filename format: `YYYYMMDDHHMMSS_DURATION_SECONDS.git`
-- Groups files chronologically; splits on gaps > threshold
+- **Trip detection:** `GAP_THRESHOLD = 30*60` s between archives splits trips. Parking filter (`is_parking_file`): an archive is parked if distance < 0.6 km OR average speed < 3.0 km/h (unreadable archives are also classified as parked but reported as warnings by `trip_import`).
+- **GPS:** `$GPRMC` (speed, heading) + `$GPGGA` (altitude); knots x 1.852 = km/h; DDMM.MMMMM -> decimal degrees; timestamps UTC. Bad checksums/malformed sentences are skipped. Stale buffer residue (a fix whose date+time goes backwards or jumps forward > `MAX_FIX_FORWARD_JUMP_S` = 120 s) ends extraction for that file.
+- **Idle segments:** `IDLE_SPEED_THRESHOLD = 0.5` km/h for at least `IDLE_DURATION_THRESHOLD = 300` s; stored per trip as `idle_segments` (start_index, end_index, duration_s, distance_km).
+- **Video merging (`merge_videos`):** ffmpeg concat. **Default is stream copy** (`use_stream_copy=True`, `-c:v copy -c:a copy`: lossless, original resolution/codec, I/O bound). Timeout is dynamic (`max(300, MB/10 + 120)` s), retried up to 2 times on timeout with +50% each. If stream copy fails (non-timeout error), it **falls back to libx264 re-encoding**: `scale=-2:OUTPUT_HEIGHT` (720), `VIDEO_CRF` 26, `VIDEO_PRESET` 'fast', AAC 128k, fixed 1800 s timeout. Constants live near the top of `build_database.py` (the parallel build uses them via import). Outputs `merged_videos/{trip_id}_rear.mp4` / `_front.mp4`.
+- **Trip JSON fields** (per entry in `trips[]`; top level also has `generated_at`): `id, label, date, duration_min, distance_km, max_speed, avg_speed, points, video_rear, video_front, video_status, video_notes, idle_segments, video_duration_s, start_timestamp, gps_points_count, video_duration_status, video_sync, sparse_timestamps`. Changing this schema requires matching changes in `web/`. Older JSON without `video_sync` falls back to linear interpolation in the frontend.
+- **`data/trips.json`, `data/merge_report.txt`, `merged_videos/`, `working_data/`, `extracted_photos/` are generated/local and gitignored.** Inspect with `python3 -c "import json; d=json.load(open('data/trips.json')); print(len(d['trips']), 'trips', d['generated_at'])"`. Do not copy trip data, coordinates or places into tracked files.
 
-### GPS Extraction
-- **NMEA Sentence Types**: `$GPRMC` (speed/heading), `$GPGGA` (altitude/satellites)
-- **Coordinate Format**: DDMM.MMMMM (degrees-minutes) → decimal degrees
-- **Speed**: Knots → km/h (×1.852)
-- **Timezone**: UTC (parsed from TAR filenames)
-- **Validation**: Requires valid fix quality + matching lat/lon across RMC/GGA
+## Dashboard (web/index.html)
 
-### Video Merging
-- **Tool**: FFmpeg with stream copy (default) or H.264 libx264 re-encoding (fallback)
-- **Default Method**: Stream copy (`-c:v copy -c:a copy`) — lossless, instant
-- **Original Resolution**: Preserved (1920x1080 typical dashcam), no scaling
-- **Performance**: ~2-3 min per long trip (I/O bound, just muxing)
-- **File Size**: Original dashcam size (~30 MB/min), no compression
-- **Fallback**: If stream copy fails (incompatible formats), automatically retries with libx264 re-encoding
-- **Fallback Performance**: ~15-20 min per trip, 720p output, ~70% size reduction, CRF 26
+Trip detail screen ("Estúdio de viagem", redesign option C "Diário de viagens"; design in `docs/superpowers/specs/2026-11-22-trip-detail-redesign-design.md`):
 
-**Configuration (in build_database.py):**
-- `merge_videos(..., use_stream_copy=True)` — Use stream copy by default
-- Set `use_stream_copy=False` to force re-encoding (useful for archive/storage-constrained)
+- Opens the trip of `#viagem-<id>` (or the latest); the hash is kept in sync (`replaceState`).
+- Layout: video stage + Leaflet map + chapters list; chapters include stops, max speed, climbs/descents and "Sem vídeo" gaps. Speed/altitude are shown in an SVG metro-line timeline where the route segment is selectable (drag handles; export the selection as GPX/KML, geometry only).
+- One transport with real clock time controls everything. Lock button "Câmeras juntas" (default: both cameras follow play/pause/seek) / "Câmeras separadas". One main camera with the other as picture-in-picture (or side by side); swap with `C`.
+- Cameras without footage for a GPS point show a "Sem gravação" note; GPS is the source of truth and the map stays interactive. `video_sync.confidence` of `medium`/`low` shows a warning.
+- Map tiles: OpenStreetMap, filtered by the per-theme CSS token `--tile-filter` (light/dark follows `prefers-color-scheme`).
+- Keyboard shortcuts (ignored in text fields): Space/K play-pause, J/L or arrows +-10 s (Shift: 60 s), I/O mark start/end of selection, M expand map, C swap main camera, Esc close popovers.
+- Needs HTTP (not `file://`) to fetch the JSON; Leaflet loads from cdnjs and tiles from OSM, so the map needs internet.
+- Customizing: edit the CSS tokens at the top of `web/index.html` and its JS in place; keep pure logic in `web/trip-model.js` / `web/video-sync.js` so Node tests can cover it.
 
-### Dashboard Output
-- **Format**: Static HTML (web/index.html) + external JSON (data/trips.json)
-- **Data Loading**: Async fetch() at page load, error handling for missing data
-- **Map**: Leaflet.js (requires HTTP serving for tiles)
-- **Charts**: Chart.js (speed + altitude profiles)
-- **Videos**: <video> elements with relative paths (../merged_videos/*.mp4)
+## Testing
 
-## Development & Modification
+- Run all: `python3 -m unittest discover -s tests -v`. Frontend logic tests run `web/trip-model.js` / `web/video-sync.js` through `node -e` (skipped when Node is missing); `tools/cdp-shot.js` needs Node 22+ and `google-chrome`.
+- Mock FFmpeg in unit tests; manual browser checklist in `tests/test_video_sync_frontend_manual.md`. For UI-impacting work, run `./run.sh` and check map, timeline and video controls in a browser.
+- CI (`.github/workflows/ci.yml`, PRs/pushes to `main`/`develop`) only runs `py_compile`, shellcheck (non-blocking), README/LICENSE/CHANGELOG presence and a JSON validity check; it does **not** run the unit tests, so run them locally before opening a PR.
 
-### Common Tasks
+## Dependencies
 
-**Rebuild the trip database** (entry point)
-```bash
-./build.sh
-# Runs: python3 -m src.extraction.build_database
-# Output: data/trips.json
-```
+Python 3.6+ (standard library only), FFmpeg/ffprobe with libx264 (`ffmpeg -codecs | grep h264`), a modern browser. Node 22+ optional (frontend tests, screenshots). Merged videos need several GB of disk per day of footage.
 
-**Serve the dashboard locally**
-```bash
-./run.sh
-# Starts: python3 -m src.processing.http_server 8765 (static server with Range support)
-# Access: http://localhost:8765/web/
-```
+## Gotchas
 
-**Watch for new SD card recordings** (watch.sh)
-- Run: `./watch.sh [--parallel]`
-- Polls `/Volumes/ddpai/DCIM/203gps/tar` every 30s for new TAR files
-- Auto-triggers build when new archives detected
-- Backs up `data/trips.json` before each rebuild
-- Sends macOS Notification Center alerts on build complete/failure
-- State file `data/.last_tar_count` tracks TAR file count (gitignored)
+- `build_database.py` and `build_database_parallel.py` must both keep working; the parallel one imports from the sequential one.
+- **HEVC:** stream copy preserves the camera's codec, and HEVC playback depends on the browser/OS. If a video does not play, check it with `ffprobe` and consider re-encoding (`use_stream_copy=False`).
+- **GPS vs camera clock:** the offset is an estimate (about 1 s resolution from file names); `confidence` reflects clock calibration only, not footage coverage (`status`: `ok`/`partial`).
+- **Stale GPS residue** can make a few `.git` files count as parked; `refresh_video_sync.py` keeps the already-imported trip composition, a fresh import would drop them. Point indices change when residue is removed, so previously selected ranges no longer apply.
+- Some TAR archives may be corrupted/truncated: extraction keeps what it can read and `trip_import` warns with the file list.
+- Video paths in the JSON are relative (`merged_videos/*.mp4`) and resolved from the server root; run the server from the repo root (`./run.sh` does).
+- `watch.sh` polls every 30 s, backs up `data/trips.json` to `data/trips.json.bak` before each rebuild and keeps its state in `data/.last_tar_count`.
 
-**Synchronize video playback with map position**
-```bash
-# Open web/index.html in browser
-./run.sh
-# Then: http://localhost:8765/web/
-# - Select trip with video
-# - Play video: map marker follows playback
-# - Click map: video seeks to that GPS point
-# - Toggle "🔗 Linked" / "🎬 Independent" for rear/front sync modes
-```
-
-**Sync modes:**
-- **Linked (default):** Both rear and front videos stay synchronized
-- **Independent:** Each video syncs to map independently
-
-**Video gap handling:**
-- If video is shorter than GPS data, yellow badge shows "⚠️ Video ended at X:XX"
-- Map remains interactive beyond video end; video freezes at last frame
-- Trust GPS data as source of truth for timeline
-
-**Change trip grouping threshold** (src/extraction/build_database.py)
-- Modify `GAP_THRESHOLD` (line 24): default 30*60 seconds
-- Re-run `./build.sh`
-
-**Change idle detection settings** (src/extraction/build_database.py)
-- Modify `IDLE_SPEED_THRESHOLD` (line 56): default 0.5 km/h — speeds at or below this are "idle"
-- Modify `IDLE_DURATION_THRESHOLD` (line 57): default 300 seconds (5 min) — minimum idle period duration
-- Re-run `./build.sh`
-- Idle segments appear in `data/trips.json` as `idle_segments` array per trip
-- Each segment includes: start_index, end_index, duration_s, distance_km
-- UI visualizes idle periods as dashed gray lines on the map
-
-**Modify video encoding parameters** (src/extraction/build_database.py & src/extraction/build_database_parallel.py)
-- Modify encoding constants at module level (lines 51-53):
-  - `OUTPUT_HEIGHT` (default 720) — target resolution
-  - `VIDEO_CRF` (default 26) — quality, range 18-28 (lower = higher quality, larger file)
-  - `VIDEO_PRESET` (default 'fast') — speed, options: ultrafast, fast, medium, slow
-- **Important**: Both `src/extraction/build_database.py` AND `src/extraction/build_database_parallel.py` must be kept in sync (parallel imports from sequential)
-- Verify output resolution: `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 merged_videos/*_rear.mp4`
-
-**Modify video merging function** (advanced)
-- Edit `merge_videos()` function (~line 423) to adjust FFmpeg command
-- Timeout is set to 1800s (30 min) for long trips; adjust if needed
-
-### Video Encoding Tuning Guide
-
-**Quality vs. File Size Trade-offs:**
-
-| CRF Value | Quality | File Size | Use Case |
-|-----------|---------|-----------|----------|
-| 18-22 | High (near-lossless) | ~15-20 MB/min | Archive, detailed review |
-| **26** | **Good (dashcam default)** | **~8 MB/min** | Standard dashcam review |
-| 28+ | Lower (compressed) | ~5-6 MB/min | Storage-constrained |
-
-**Speed vs. Encoding Time Trade-offs:**
-
-| Preset | Speed | Encoding Time | Use Case |
-|--------|-------|----------------|----------|
-| ultrafast | Very fast | ~2-3 min/10min video | Quick testing, real-time |
-| **fast** | **Moderate** | **~3-4 min/10min video** | Balanced (default) |
-| medium | Slower | ~5-8 min/10min video | Better quality needed |
-| slow | Slowest | ~10-15 min/10min video | Maximum compression |
-
-**Common Tuning Scenarios:**
-
-- **Storage constrained**: Set `VIDEO_CRF = 28` and `VIDEO_PRESET = 'ultrafast'` (fastest encoding, smallest files)
-- **High-quality archive**: Set `VIDEO_CRF = 20` and `VIDEO_PRESET = 'slow'` (best quality, larger files, slower)
-- **Default (balanced)**: `VIDEO_CRF = 26` and `VIDEO_PRESET = 'fast'` (recommended)
-
-**Performance Notes:**
-- Stream copy (old method): ~5-10 min per group, no CPU usage, full resolution
-- H.264 re-encoding (current): ~15-20 min for 200+ min long trips, CPU-intensive, 70-75% size reduction
-- FFmpeg timeout (1800s = 30 min) is sufficient for trips up to 206 min; longer trips may need adjustment
-
-**Customize dashboard UI** (web/index.html)
-- Edit CSS (lines 11-170) for styling changes
-- Modify JavaScript functions (renderApp, updateMap, updateCharts, updateVideos)
-- Update Leaflet map center/zoom, Chart.js colors, etc.
-
-**Add new trip metadata to JSON**
-- Edit `groups_data.append()` section in src/extraction/build_database.py
-- Add fields to the dictionary, they'll auto-appear in web/index.html if accessed
-
-### Testing & Validation
-
-No automated test suite. Manual validation:
-
-1. **Check trip detection**: `./build.sh` prints detected groups + validation results
-2. **Verify database**: `python3 -c "import json; d=json.load(open('data/trips.json')); print(len(d['trips']), 'trips')"`
-3. **Test UI**: `./run.sh` → open http://localhost:8765/web/ → select trip, play video
-4. **Check DevTools**: Browser Console for JavaScript errors, Network tab for JSON fetch
-5. **Validate maps**: Ensure Leaflet polyline renders for each trip (requires HTTP server)
-
-**FFmpeg Build Time Expectations:**
-- Short trips (10-20 min): ~5-10 min encode time
-- Medium trips (60 min): ~15-20 min encode time
-- Long trips (200+ min): ~40-60 min encode time (timeout set to 1800s = 30 min per video)
-- If build times exceed timeout, increase `timeout` parameter in `merge_videos()` or reduce `VIDEO_CRF` for faster encoding
-
-### Dependencies
-
-**External Tools**
-- FFmpeg with libx264 support (for video re-encoding) — verify with: `ffmpeg -codecs | grep h264`
-- Python 3.6+ (standard library only: tarfile, json, subprocess, datetime, pathlib, collections, math)
-- Web browser (Leaflet.js + Chart.js loaded from CDN in HTML)
-
-**System Requirements**
-- Sufficient disk space: ~15 GB for merged videos + source files
-- Video paths must be accessible (currently hardcoded—adjust if relocating dashcam footage)
-
-## Known Limitations & Quirks
-
-- **Hardcoded paths**: Video directories are absolute paths in src/extraction/build_database.py (lines 18-20)
-- **NMEA parsing**: Gracefully ignores bad checksums and malformed sentences
-- **Timezone**: Assumes UTC, converts via TAR filename timestamp (no local timezone detection)
-- **Video validation**: Matches rear/front count per trip but doesn't verify frame counts
-- **Heatmap rendering**: Not available on file:// URLs (requires HTTP server for security)
-- **22 TAR files**: Known to fail parsing (corrupted or incomplete)
-- **Dynamic data loading**: web/index.html requires HTTP server (not file:// URLs) to fetch data/trips.json
-- **Relative paths**: Videos must exist at merged_videos/*.mp4; check paths if videos moved
-
-## Data Summary (Current Rebuild Results)
-
-- **Archives**: 100 .git files → 11 groups detected → 7 valid groups
-- **GPS Points**: 24,170 total extracted (real NMEA data, no interpolation)
-- **Videos**: 7 groups with rear+front merged (14.9 GB total)
-- **Coverage**: Mar 6-8, 2026, Florianópolis, Brazil (UTC timezone)
-
-## Trip Groups (Valid)
-
-1. Mar 06 13:47 → 14:04 (29.66 km, 16.8 min)
-2. Mar 06 15:19 → 15:26 (20.44 km, 7.0 min)
-3. Mar 06 16:17 → 16:43 (31.2 km, 25.6 min)
-4. Mar 07 10:31 → 11:38 (113.34 km, 66.8 min) — Longest journey
-5. Mar 07 13:00 → 13:19 (24.76 km, 18.8 min)
-6. Mar 07 15:22 → 18:48 (336.93 km, 206.1 min) — Full day drive
-7. Mar 08 07:13 → 07:25 (0.46 km, 12.1 min)
-
-## Project Layout (v4)
+## Project Layout
 
 ```
-ddpai_extractor/
-├── build.sh              # Build entry point (calls src.extraction.build_database)
-├── run.sh               # Run entry point (starts HTTP server on port 8765)
-├── watch.sh             # Watchdog script (polls SD card for new TAR files)
-├── CLAUDE.md            # This file
-├── README.md            # User documentation
-├── LICENSE              # MIT license
-│
-├── src/                 # Python package
-│   ├── __init__.py
-│   ├── extraction/      # GPS extraction & trip detection
-│   │   ├── __init__.py
-│   │   ├── build_database.py           # Main: GPS extraction + trip detection
-│   │   ├── build_database_parallel.py  # Parallel variant
-│   │   └── ddpai_route_improved.py     # Reference: original code
-│   ├── processing/      # Trip utilities
-│   │   ├── __init__.py
-│   │   └── merge_trips.py              # Standalone trip merging
-│   └── video/           # Video handling
-│       ├── __init__.py
-│       └── merge_videos.py             # FFmpeg wrapper
-│
-├── tools/               # Build & debug scripts
-│   ├── build_parallel.sh       # Parallel build (2.5-3.5× speedup)
-│   ├── debug_videos.sh         # Video debugging utility
-│   └── install_fftools.sh      # FFmpeg installation helper
-│
-├── docs/                # Documentation
-│   ├── CONTRIBUTING.md         # Contribution guidelines
-│   ├── CHANGELOG.md            # Release history
-│   ├── VIDEO_DEBUG_GUIDE.md    # Debugging guide
-│   └── superpowers/            # Extended docs
-│
-├── web/                 # Web frontend
-│   ├── index.html              # Dashboard: fetches data/trips.json, renders UI
-│   ├── favicon.ico             # Icon
-│   └── favicon.png             # Icon
-│
-├── data/                # Generated data (do not commit)
-│   └── trips.json       # Auto-generated by ./build.sh
-│
-├── merged_videos/       # Generated videos (do not commit)
-│   ├── 20260306134738_rear.mp4
-│   ├── 20260306134738_front.mp4
-│   └── ... (7 trip pairs)
-│
-└── working_data/        # Source data
-    └── tar/             # 100 .git TAR archives (~3 GB)
+build.sh  run.sh  watch.sh        # entry points
+AGENTS.md  LOCAL_SETUP.md  README.md  LICENSE
+src/extraction/    build_database.py, build_database_parallel.py, video_timeline.py, ddpai_route_improved.py (reference)
+src/processing/    trip_import.py, http_server.py, merge_trips.py (legacy)
+src/video/         merge_videos.py (legacy wrapper)
+tools/             build_parallel.sh, refresh_video_sync.py, extract_photos.sh, cdp-shot.js, debug_videos.sh, install_fftools.sh
+tests/             unittest suite (test_*.py), trip_model_cases.js, manual frontend checklist
+web/               index.html, trip-model.js, video-sync.js, favicon.*
+docs/              CONTRIBUTING.md, CHANGELOG.md, VIDEO_DEBUG_GUIDE.md,
+                   superpowers/{specs,plans}/ (design specs and plans), ux/redesign-2026-11/ (redesign prototypes, PROPOSTA.md)
+data/ merged_videos/ working_data/ extracted_photos/   # generated or local, gitignored
 ```
 
-## Migration Notes (v3)
-
-This project was refactored from monolithic `build_dashboard.py` (single 30KB script generating 1.4 MB HTML with embedded JSON) to a **modular architecture**:
-
-**Changes:**
-- **Decoupled build**: `src/extraction/build_database.py` → generates JSON only, no HTML
-- **Decoupled frontend**: `web/index.html` → static 14 KB, loads data via fetch()
-- **Clean entry points**: `./build.sh` and `./run.sh` for common tasks
-- **Organized code**: Python modules in `src/`, web assets in `web/`
-- **Simplified data**: `data/trips.json` can be version-controlled, re-generated independently
-
-**Benefits:**
-- Smaller files (index.html 14 KB vs 1.4 MB dashboard.html)
-- Faster data updates (rebuild JSON in ~2 min vs 6+ min for full HTML)
-- Easier to modify UI (HTML/JS separate from Python build logic)
-- Better separation of concerns (data layer vs presentation layer)
+`AGENTS.md` holds the shorter contributor guidelines (style, commit conventions); keep it consistent with this file.
