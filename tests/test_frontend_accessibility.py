@@ -196,5 +196,41 @@ class TestFinalReviewPolish(unittest.TestCase):
             self.assertIn(sel, m.group(1))
 
 
+class TestPr22ReviewFixes(unittest.TestCase):
+    def test_fine_sync_guard_used_instead_of_truthiness(self):
+        for name in ('seekToPoint', 'onVideoTimeUpdate', 'updateCameraGaps'):
+            self.assertIn('hasFineSync(', function_body(name), name)
+
+    def test_nudge_uses_model_helper(self):
+        self.assertIn('TripModel.nudgeIndex(', function_body('nudge'))
+
+    def test_side_layout_falls_back_to_pip_without_both_cameras(self):
+        self.assertRegex(function_body('updateLayoutButtons'), r"!CAMERAS\.every\(hasVideo\)\)\s*layoutMode = 'pip'")
+
+    def test_swap_camera_reseeks_new_main(self):
+        self.assertIn('seekToPoint(playIndex)', function_body('swapCamera'))
+
+    def test_no_gps_has_its_own_flag_and_message(self):
+        self.assertIn("'nogps'", function_body('onVideoTimeUpdate'))
+        self.assertIn('GPS indisponível neste momento do vídeo', function_body('renderCameraNote'))
+        self.assertNotIn("'gap'", function_body('onVideoTimeUpdate'))
+
+    def test_missing_main_coverage_pauses_cameras(self):
+        body = function_body('seekToPoint')
+        self.assertIn('mainMissing', body)
+        self.assertIn('pauseForMissingCoverage', body)
+
+    def test_unknown_hash_is_ignored_on_hashchange(self):
+        self.assertRegex(HTML, re.compile(r"addEventListener\('hashchange'.*?findIndex.*?wanted >= 0", re.S))
+
+    def test_quality_tip_click_not_closed_by_outside_handler(self):
+        self.assertIn("closest('.popwrap, #quality-wrap')", HTML)
+
+    def test_stage_play_lives_inside_stage(self):
+        m = re.search(r'<div class="stage pip" id="stage">(.*?)\n      </div>\n      <div class="stage-empty"', HTML, re.S)
+        self.assertIsNotNone(m)
+        self.assertIn('id="stage-play"', m.group(1))
+
+
 if __name__ == '__main__':
     unittest.main()

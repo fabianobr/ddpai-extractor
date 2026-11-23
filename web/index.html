@@ -139,7 +139,7 @@ button, input { font: inherit; color: inherit; }
 .stage-empty b { font: 700 24px/1.1 'Familjen Grotesk', system-ui, sans-serif; color: #fff; }
 .stage-empty .i { width: 30px; height: 30px; margin: 0 auto; }
 .stage-play { position: absolute; z-index: 3; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--yellow); color: var(--yellow-ink); cursor: pointer; box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
-.stage.side .stage-play { left: calc(25% - 1px); }   /* centro da câmera principal (coluna esquerda: frente) */
+.stage.side .stage-play { left: calc(25% - 1px); }   /* centro da câmera principal (coluna esquerda: frente); o botão fica dentro de #stage */
 .stage.side.rear-main .stage-play { left: calc(75% + 1px); }
 .stage-play:hover { filter: brightness(1.06); }
 .stage-play .i { width: 34px; height: 34px; margin-left: 3px; }
@@ -420,13 +420,13 @@ li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); borde
           <div class="overlay loading" id="rear-loading" hidden>Carregando vídeo…</div>
           <div class="overlay note" id="rear-note" role="status" hidden></div>
         </div>
+        <button type="button" class="stage-play" id="stage-play" aria-label="Reproduzir" title="Reproduzir (espaço)" hidden><svg class="i" aria-hidden="true"><use href="#i-play"/></svg></button>
       </div>
       <div class="stage-empty" id="stage-empty" role="status" hidden>
         <svg class="i" aria-hidden="true"><use href="#i-nofilm"/></svg>
         <b>Viagem sem vídeo</b>
         <span>O mapa, a linha do tempo e os capítulos continuam disponíveis.</span>
       </div>
-      <button type="button" class="stage-play" id="stage-play" aria-label="Reproduzir" title="Reproduzir (espaço)" hidden><svg class="i" aria-hidden="true"><use href="#i-play"/></svg></button>
       <div class="stagectl" id="stagectl">
         <button type="button" id="layout-side" aria-pressed="false" title="Ver frente e trás lado a lado"><svg class="i" aria-hidden="true"><use href="#i-split"/></svg><span class="lbl">Lado a lado</span></button>
         <button type="button" id="camera-swap" title="Trocar câmera principal (C)"><svg class="i" aria-hidden="true"><use href="#i-swap"/></svg><span class="lbl">Trocar</span></button>
@@ -731,7 +731,8 @@ function renderCameraNote(camera) {
     const flags = cameraFlags[camera];
     const text = flags.nofile ? 'Sem vídeo desta câmera'
         : flags.error ? 'Este navegador não conseguiu reproduzir o vídeo.'
-        : flags.gap ? `Sem gravação da câmera ${CAMERA_NAMES[camera]} neste ponto da viagem.` : '';
+        : flags.gap ? `Sem gravação da câmera ${CAMERA_NAMES[camera]} neste ponto da viagem.`
+        : flags.nogps ? 'GPS indisponível neste momento do vídeo' : '';
     const note = $(camera + '-note');
     if (note.textContent !== text) note.textContent = text;
     note.hidden = !text;
@@ -805,6 +806,7 @@ function loadTripVideos(trip) {
 
 function updateLayoutButtons() {
     const stage = $('stage');
+    if (!CAMERAS.every(hasVideo)) layoutMode = 'pip';   // lado a lado só faz sentido com as duas câmeras
     const swapped = syncState.activeVideo === 'rear';
     stage.className = 'stage ' + (layoutMode === 'side' ? (swapped ? 'side rear-main' : 'side') : swapped ? 'pip swapped' : 'pip');
     const both = CAMERAS.every(hasVideo);
@@ -838,6 +840,7 @@ function swapCamera() {
     syncState.activeVideo = other;
     updateLayoutButtons();
     updatePlayButton();
+    if (currentTrip) seekToPoint(playIndex);   // a nova principal pode ter ficado em outro instante (modo separado)
 }
 
 function toggleSideBySide() {
@@ -1005,8 +1008,9 @@ function updateChapterNow(index) {
 /* ---------- posição ---------- */
 function updateCameraGaps(index) {
     CAMERAS.forEach(camera => {
-        const missing = !!currentTrip.video_sync && hasVideo(camera) && timeForPoint(currentTrip, camera, index) === null;
+        const missing = TripModel.hasFineSync(currentTrip) && hasVideo(camera) && timeForPoint(currentTrip, camera, index) === null;
         setCameraFlag(camera, 'gap', missing);
+        setCameraFlag(camera, 'nogps', false);   // o mapeamento voltou (ou houve busca)
     });
 }
 
@@ -1046,13 +1050,16 @@ function seekToPoint(index) {
     syncState.isSyncing = true;
     // Modo sincronizado move as duas câmeras; no independente, só a principal.
     const targets = syncState.mode === 'linked' ? CAMERAS : [syncState.activeVideo];
+    const fine = TripModel.hasFineSync(currentTrip);
+    // Sem gravação da principal neste ponto: no modo junto, a outra câmera não pode seguir tocando sozinha.
+    const mainMissing = fine && hasVideo(syncState.activeVideo) && timeForPoint(currentTrip, syncState.activeVideo, index) === null;
     targets.forEach(camera => {
         const video = cameraVideo(camera);
         if (!video.dataset.lazySrc) return;
-        const seekTime = currentTrip.video_sync ? timeForPoint(currentTrip, camera, index) : defaultTime;
-        if (seekTime === null) {
+        const seekTime = fine ? timeForPoint(currentTrip, camera, index) : defaultTime;
+        if (seekTime === null || (mainMissing && camera !== syncState.activeVideo)) {
             if (syncState.pauseForMissingCoverage) syncState.pauseForMissingCoverage(video);
-            return;
+            if (seekTime === null) return;
         }
         if (!Number.isFinite(seekTime) || seekTime < 0) return;
         ensureVideoLoaded(video);
@@ -1085,6 +1092,8 @@ function togglePlay() {
         video.pause();
         return;
     }
+    // principal sem gravação neste ponto: tocar a faria voltar ao instante antigo; a nota já explica
+    if (currentTrip && TripModel.hasFineSync(currentTrip) && timeForPoint(currentTrip, syncState.activeVideo, playIndex) === null) return;
     ensureVideoLoaded(video);
     const started = video.play();
     if (started && started.catch) started.catch(() => updatePlayButton());
@@ -1092,8 +1101,7 @@ function togglePlay() {
 
 function nudge(seconds) {
     if (!currentTrip) return;
-    const target = TripModel.elapsedAt(currentTrip, playIndex) + seconds;
-    seekToPoint(TripModel.indexAtElapsed(currentTrip, target));
+    seekToPoint(TripModel.nudgeIndex(currentTrip, playIndex, seconds));
 }
 
 function setRate(rate) {
@@ -1114,10 +1122,10 @@ function onVideoTimeUpdate(event, camera) {
     const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
     if (!gpsDuration || points.length === 0) return;
     let index;
-    if (currentTrip.video_sync) {
+    if (TripModel.hasFineSync(currentTrip)) {
         index = pointAtVideoTime(currentTrip, camera, time);
         if (index === null) {
-            setCameraFlag(camera, 'gap', true);
+            setCameraFlag(camera, 'nogps', true);   // há imagem, mas nenhum ponto de GPS próximo
             return;
         }
     } else if (points[0].length >= 6) {
@@ -1562,7 +1570,7 @@ function wireControls() {
         const current = $('trip-list').querySelector('[aria-current]') || $('trip-list').querySelector('button');
         if (current) current.focus();
     });
-    document.addEventListener('click', event => { if (!event.target.closest('.popwrap')) closePopovers(); });
+    document.addEventListener('click', event => { if (!event.target.closest('.popwrap, #quality-wrap')) closePopovers(); });
     $('layout-side').addEventListener('click', toggleSideBySide);
     $('camera-swap').addEventListener('click', swapCamera);
     CAMERAS.forEach(camera => {
@@ -1613,9 +1621,10 @@ function wireControls() {
     });
     $('map-expand').addEventListener('click', toggleMapExpand);
     addEventListener('hashchange', () => {
-        if (!trips.length || !location.hash.startsWith('#viagem-')) return;
-        const wanted = initialTripIndex(trips);
-        if (wanted !== tripIndex) selectTrip(wanted, false);
+        const match = /^#viagem-(.+)$/.exec(location.hash);
+        if (!trips.length || !match) return;
+        const wanted = trips.findIndex(trip => String(trip.id) === decodeURIComponent(match[1]));
+        if (wanted >= 0 && wanted !== tripIndex) selectTrip(wanted, false);   // id desconhecido: ignora
     });
 }
 
@@ -1651,7 +1660,9 @@ async function init() {
             setCameraFlag(camera, 'error', true);
         });
     });
-    linkVideos(cameraVideo('rear'), cameraVideo('front'), syncState, () => currentTrip);
+    // sincronização 'unavailable' (offsets todos nulos): o linkVideos deve ver a viagem sem video_sync e usar o tempo direto
+    linkVideos(cameraVideo('rear'), cameraVideo('front'), syncState,
+        () => (currentTrip && currentTrip.video_sync && !TripModel.hasFineSync(currentTrip) ? {...currentTrip, video_sync: null} : currentTrip));
     wireControls();
     updateSyncLock();
     selectTrip(initialTripIndex(trips), false);
