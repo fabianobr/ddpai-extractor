@@ -221,16 +221,18 @@ Browser fetches JSON, renders map/SVG timeline/videos (Leaflet + inline SVG)
 # - Select trip with video
 # - Play video: map marker follows playback
 # - Click map: video seeks to that GPS point
-# - Toggle "🔗 Linked" / "🎬 Independent" for rear/front sync modes
+# - Lock button ("Câmeras juntas" / "Câmeras separadas") links or separates the cameras
 ```
 
 **Sync modes:**
-- **Linked (default):** Both rear and front videos stay synchronized
-- **Independent:** Each video syncs to map independently
+- One **main camera** (front by default; "Trocar" / C swaps it) drives the playhead; the other is shown as picture-in-picture or side by side ("Lado a lado")
+- **Câmeras juntas (default):** the second camera follows the main one
+- **Câmeras separadas:** only the main camera is moved by the map/timeline
 
 **Video gap handling:**
-- If video is shorter than GPS data, yellow badge shows "⚠️ Video ended at X:XX"
-- Map remains interactive beyond video end; video freezes at last frame
+- Where a camera has no footage for the current GPS point, its panel shows a note ("Sem gravação da câmera … neste ponto da viagem"); a "Sem vídeo" chapter marks long gaps
+- If the main camera has no footage at the target, both cameras pause and the playhead still moves to the target
+- Map and timeline stay interactive in gaps
 - Trust GPS data as source of truth for timeline
 
 **Change trip grouping threshold** (src/extraction/build_database.py)

@@ -17,10 +17,12 @@ const height = Number(h);
 const dark = flags.includes('--dark');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function waitForPort(profileDir, timeoutMs = 10000) {
+async function waitForPort(profileDir, getSpawnError, timeoutMs = 10000) {
   const file = path.join(profileDir, 'DevToolsActivePort');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const spawnError = getSpawnError();
+    if (spawnError) throw new Error(`não foi possível iniciar o google-chrome: ${spawnError.message}`);
     if (fs.existsSync(file)) {
       const port = fs.readFileSync(file, 'utf8').split('\n')[0].trim();
       if (port) return port;
@@ -46,8 +48,7 @@ async function main() {
   const chromeExited = new Promise((resolve) => chrome.on('exit', resolve));
 
   try {
-    const port = await waitForPort(profileDir);
-    if (chromeError) throw new Error(`cannot start google-chrome: ${chromeError.message}`);
+    const port = await waitForPort(profileDir, () => chromeError);
 
     const resp = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' });
     if (!resp.ok) throw new Error(`/json/new failed with HTTP ${resp.status}`);

@@ -111,8 +111,8 @@ Browser: Leaflet map, SVG timeline, video players
 
 ### Features
 - **Bidirectional sync:** Play/scrub video → map updates | Click map → video seeks
-- **Switchable modes:** Linked (both videos together) or Independent (each syncs separately)
-- **Gap handling:** Gracefully handles when video is shorter/longer than GPS data
+- **Switchable modes:** lock button "Câmeras juntas" (both videos together) or "Câmeras separadas" (only the main camera follows the map/timeline); one main camera, the other as picture-in-picture or side by side
+- **Gap handling:** Cameras without footage for a GPS point show a "Sem gravação…" note and a "Sem vídeo" chapter; the map stays interactive
 - **Real-time visualization:** See playback position on map with time indicator
 
 ### Usage
