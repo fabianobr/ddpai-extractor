@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estúdio: Mapa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Opção B — "Mapa / Mission control": o mapa em tela cheia é a base; vídeos, viagens e telemetria
+   flutuam como painéis. A rota é pintada pela velocidade (rampa de um só matiz, laranja).
+   Azul = "você está aqui" (convenção de apps de mapa). Magenta = trecho ativo (convenção de GPS aeronáutico). */
+:root {
+  color-scheme: light;
+  --land: #eceeea; --water: #b5d1e4; --park: #d3e4ca; --contour: rgba(96, 110, 88, .2);
+  --road: #ffffff; --casing: #d3d7d1; --major-casing: #c2c8c1; --town: #e2e5e0;
+  --panel: rgba(255, 255, 255, .96); --panel-solid: #ffffff; --panel-2: #f2f4f6; --hair: #e0e4e8;
+  --ink: #16202a; --ink-2: #4a5763; --ink-3: #7f8a94;
+  --vehicle: #0a6cff; --vehicle-halo: rgba(10, 108, 255, .18);
+  --sel: #c8157f; --sel-wash: rgba(200, 21, 127, .1);
+  --s0: #f6c27a; --s1: #ef9a3a; --s2: #d9721a; --s3: #b0520c; --s4: #7c3406;  /* rampa de velocidade */
+  --stop: #4f5c68; --warn: #a15c00; --warn-bg: #fff3dc; --ok: #1d7a4e;
+  --shadow: 0 1px 2px rgba(22, 32, 42, .08), 0 10px 28px rgba(22, 32, 42, .14);
+  --r-float: 14px; --r-ctl: 10px; --r-media: 10px;
+  --gut-l: max(16px, env(safe-area-inset-left, 0px)); --gut-r: max(16px, env(safe-area-inset-right, 0px));
+  --drawer: 320px; --dock: 400px; --strip: 196px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --land: #1b2127; --water: #0f2433; --park: #1b2a21; --contour: rgba(255, 255, 255, .05);
+  --road: #2b333b; --casing: #141a1f; --major-casing: #10151a; --town: #20272e;
+  --panel: rgba(30, 37, 44, .95); --panel-solid: #1e252c; --panel-2: #283039; --hair: #323b45;
+  --ink: #e8edf1; --ink-2: #aab5be; --ink-3: #75828d;
+  --vehicle: #4c9bff; --vehicle-halo: rgba(76, 155, 255, .22);
+  --sel: #ff4fb0; --sel-wash: rgba(255, 79, 176, .12);
+  --s0: #8a4a12; --s1: #b8661a; --s2: #e08a2a; --s3: #f5ac55; --s4: #ffd59a;
+  --stop: #9aa6b1; --warn: #f2b65a; --warn-bg: rgba(242, 182, 90, .12); --ok: #63c99a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .45);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --land: #1b2127; --water: #0f2433; --park: #1b2a21; --contour: rgba(255, 255, 255, .05);
+    --road: #2b333b; --casing: #141a1f; --major-casing: #10151a; --town: #20272e;
+    --panel: rgba(30, 37, 44, .95); --panel-solid: #1e252c; --panel-2: #283039; --hair: #323b45;
+    --ink: #e8edf1; --ink-2: #aab5be; --ink-3: #75828d;
+    --vehicle: #4c9bff; --vehicle-halo: rgba(76, 155, 255, .22);
+    --sel: #ff4fb0; --sel-wash: rgba(255, 79, 176, .12);
+    --s0: #8a4a12; --s1: #b8661a; --s2: #e08a2a; --s3: #f5ac55; --s4: #ffd59a;
+    --stop: #9aa6b1; --warn: #f2b65a; --warn-bg: rgba(242, 182, 90, .12); --ok: #63c99a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .45);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--land); color: var(--ink); font: 400 14px/1.4 'Albert Sans', 'Helvetica Neue', Arial, sans-serif; font-variant-numeric: tabular-nums; overflow: hidden; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--vehicle); outline-offset: 2px; }
+.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.app { position: relative; height: 100vh; height: 100dvh; overflow: hidden; }
+.mapwrap { position: absolute; inset: 0; }
+svg.map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+svg.map.is-panning { cursor: grabbing; }
+.float { position: absolute; background: var(--panel); border-radius: var(--r-float); box-shadow: var(--shadow); backdrop-filter: blur(10px); }
+
+/* gaveta de viagens */
+.drawer { left: var(--gut-l); top: 16px; bottom: calc(16px + var(--strip) + 12px); width: var(--drawer); display: flex; flex-direction: column; overflow: hidden; }
+.dhead { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px 16px; }
+.dhead b { font-size: 15px; font-weight: 700; letter-spacing: -.01em; flex: 1; }
+.logo { width: 26px; height: 26px; border-radius: 8px; background: var(--vehicle); display: grid; place-items: center; color: #fff; }
+.logo .i { width: 16px; height: 16px; stroke-width: 2.2; }
+.icon { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: var(--r-ctl); background: none; cursor: pointer; color: var(--ink-2); }
+.icon:hover { background: var(--panel-2); color: var(--ink); }
+.search { margin: 0 14px 8px; position: relative; }
+.search .i { position: absolute; left: 10px; top: 9px; color: var(--ink-3); width: 16px; height: 16px; }
+.search input { width: 100%; height: 34px; border: 1px solid var(--hair); background: var(--panel-2); border-radius: var(--r-ctl); padding: 0 10px 0 32px; }
+.search input::placeholder { color: var(--ink-3); }
+.dlist { overflow: auto; padding: 0 8px 8px; flex: 1; }
+.dayh { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 8px 6px; }
+.dayh b { font-size: 13px; font-weight: 600; }
+.dayh span { font-size: 12px; color: var(--ink-3); }
+.trip { width: 100%; display: grid; grid-template-columns: 64px 1fr; gap: 10px; padding: 8px; border: 0; border-radius: var(--r-ctl); background: none; cursor: pointer; text-align: left; }
+.trip:hover { background: var(--panel-2); }
+.trip[aria-current=true] { background: var(--panel-2); }
+.trip svg { width: 64px; height: 48px; border-radius: 8px; background: var(--land); }
+.trip .tt { display: grid; gap: 1px; align-content: center; }
+.trip .tt b { font-size: 15px; font-weight: 600; }
+.trip .tt span { font-size: 13px; color: var(--ink-2); }
+.tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px 0 5px; border-radius: 999px; font-size: 12px; background: var(--panel-2); color: var(--ink-2); }
+.trip[aria-current=true] .tag { background: var(--panel-solid); }
+.tag .i { width: 13px; height: 13px; }
+.tag.warn { color: var(--warn); background: var(--warn-bg); }
+.detail { padding: 4px 8px 10px; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hair); border-radius: var(--r-ctl); overflow: hidden; margin: 4px 0 10px; }
+.kpis div { background: var(--panel-solid); padding: 8px 10px; }
+.kpis b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.kpis b small { font-size: 12px; font-weight: 500; color: var(--ink-3); margin-left: 2px; }
+.kpis span { font-size: 11.5px; color: var(--ink-3); }
+.mlist { list-style: none; margin: 0; padding: 0; display: grid; }
+.mlist button { width: 100%; display: grid; grid-template-columns: 18px 1fr auto; gap: 9px; align-items: center; padding: 5px 6px; border: 0; background: none; border-radius: 8px; cursor: pointer; text-align: left; font-size: 13px; }
+.mlist button:hover { background: var(--panel-2); }
+.mlist .i { width: 16px; height: 16px; color: var(--ink-3); }
+.mlist time { color: var(--ink-3); font-size: 12px; }
+.mlist li.now button { background: var(--panel-2); font-weight: 600; }
+.mlist li.now .i { color: var(--vehicle); }
+.dfoot { padding: 8px 16px 12px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--hair); }
+.hint { margin: 6px 8px 0; display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: var(--r-ctl); background: var(--panel-2); font-size: 13px; }
+.hint button { margin-left: auto; border: 0; background: var(--ink); color: var(--panel-solid); height: 28px; padding: 0 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.hint[hidden] { display: none; }
+
+/* doca de vídeos */
+.dock { right: var(--gut-r); top: 16px; width: var(--dock); padding: 10px 12px 12px; }
+.dockh { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.dockh b { font-weight: 600; flex: 1; }
+.seg { display: inline-flex; padding: 2px; border-radius: var(--r-ctl); background: var(--panel-2); }
+.seg button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.seg button[aria-pressed=true] { background: var(--panel-solid); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); font-weight: 600; }
+.lockbtn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; cursor: pointer; color: var(--ink-3); position: relative; }
+.lockbtn:hover { background: var(--panel-2); color: var(--ink); }
+.lockbtn[aria-pressed=false] { color: var(--warn); background: var(--warn-bg); }
+.vids { display: grid; gap: 8px; }
+.vid { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r-media); overflow: hidden; background: linear-gradient(180deg, #5f86a6 0%, #a9c1d2 45%, #6b7178 54%, #2e3237 100%); }
+.vid.night { background: linear-gradient(180deg, #04060a, #10141a 60%, #1d1f24); }
+.vids.only-front .vid[data-cam=rear], .vids.only-rear .vid[data-cam=front] { display: none; }
+.fr { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s ease; }
+.fr.on { opacity: 1; }
+.playing .fr.on { animation: drift 7s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: scale(1); } to { transform: scale(1.045); } }
+.vlabel { position: absolute; left: 8px; top: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(15, 20, 25, .62); color: #fff; font-size: 12px; font-weight: 500; backdrop-filter: blur(6px); }
+.vexp { position: absolute; right: 8px; top: 8px; z-index: 2; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: rgba(15, 20, 25, .55); color: #fff; cursor: pointer; }
+.vexp .i { width: 15px; height: 15px; }
+.nocover { position: absolute; inset: 0; z-index: 1; display: none; place-content: center; gap: 6px; text-align: center; color: #e6eaee; font-size: 13px; background: repeating-linear-gradient(135deg, rgba(25, 30, 36, .94) 0 10px, rgba(36, 42, 49, .94) 10px 20px); }
+.nocover .i { margin: 0 auto; width: 22px; height: 22px; }
+.vid.gap .nocover { display: grid; }
+.held { position: absolute; left: 8px; bottom: 8px; z-index: 2; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(15, 20, 25, .65); color: #fff; display: none; }
+.unlinked .vid[data-cam=rear] .held { display: block; }
+.dock.big { width: min(880px, calc(100vw - var(--drawer) - 64px)); }
+.dock.big .vids { grid-template-columns: 1fr 1fr; }
+
+/* controles e legenda do mapa */
+.mapctl { position: absolute; right: calc(var(--gut-r) + var(--dock) + 12px); bottom: calc(16px + var(--strip) + 12px); display: grid; gap: 6px; }
+.mapctl .grp { background: var(--panel); border-radius: var(--r-ctl); box-shadow: var(--shadow); display: grid; overflow: hidden; }
+.mapctl button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; color: var(--ink-2); }
+.mapctl .grp button + button { border-top: 1px solid var(--hair); }
+.mapctl button:hover { color: var(--ink); background: var(--panel-2); }
+.mapctl button[aria-pressed=true] { color: var(--vehicle); }
+.legend { position: absolute; left: calc(var(--gut-l) + var(--drawer) + 12px); bottom: calc(16px + var(--strip) + 12px); display: flex; align-items: center; gap: 14px; padding: 7px 12px; border-radius: var(--r-ctl); font-size: 12px; color: var(--ink-2); }
+.ramp { display: inline-flex; align-items: center; gap: 6px; }
+.ramp i { display: block; width: 96px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--s0), var(--s1), var(--s2), var(--s3), var(--s4)); }
+.scale { display: inline-flex; flex-direction: column; gap: 2px; }
+.scale i { display: block; height: 5px; border: 1.5px solid var(--ink-2); border-top: 0; }
+.callout { position: absolute; z-index: 3; transform: translate(14px, -50%); pointer-events: none; display: inline-flex; gap: 8px; align-items: center; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--ink); color: var(--panel-solid); font-size: 12.5px; font-weight: 600; white-space: nowrap; box-shadow: var(--shadow); }
+.callout span { font-weight: 400; opacity: .8; }
+.coordpop { position: absolute; z-index: 4; transform: translate(-50%, calc(-100% - 12px)); padding: 10px 12px; border-radius: var(--r-ctl); min-width: 220px; }
+.coordpop[hidden] { display: none; }
+.coordpop b { display: block; font-size: 13px; font-weight: 600; }
+.coordpop small { color: var(--ink-3); font-size: 12px; }
+.coordpop .row { display: flex; gap: 6px; margin-top: 8px; }
+
+/* faixa de telemetria + transporte */
+.strip { left: var(--gut-l); right: var(--gut-r); bottom: 16px; height: var(--strip); padding: 8px 16px 10px 12px; display: grid; grid-template-rows: 48px 1fr; }
+.bar { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.tc { display: flex; align-items: center; gap: 2px; }
+.tb { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--ink); }
+.tb:hover { background: var(--panel-2); }
+.tb .i { width: 22px; height: 22px; }
+.tb.play { width: 44px; height: 44px; background: var(--vehicle); color: #fff; }
+.tb.play:hover { filter: brightness(1.08); background: var(--vehicle); }
+.tb.play .i { width: 20px; height: 20px; }
+.clock { display: grid; line-height: 1.1; }
+.clock b { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+.clock span { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.read { display: flex; gap: 18px; padding-left: 14px; border-left: 1px solid var(--hair); }
+.read div { display: grid; line-height: 1.15; }
+.read b { font-size: 18px; font-weight: 600; }
+.read b small { font-size: 12px; color: var(--ink-3); font-weight: 500; margin-left: 2px; }
+.read span { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.grow { flex: 1; }
+.selchip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 12px; border-radius: var(--r-ctl); background: var(--sel-wash); color: var(--ink); font-size: 13px; white-space: nowrap; position: relative; }
+.selchip i { width: 10px; height: 10px; border-radius: 3px; background: var(--sel); display: inline-block; }
+.selchip[hidden], .btn[hidden] { display: none; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--hair); border-radius: var(--r-ctl); background: var(--panel-solid); cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--panel-2); }
+.btn.s { height: 28px; padding: 0 9px; }
+.btn .i { width: 16px; height: 16px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 8px; border-radius: 999px; border: 1px solid var(--hair); background: none; font-size: 12.5px; color: var(--ink-2); cursor: help; white-space: nowrap; }
+.pill .i { width: 16px; height: 16px; }
+.pill[data-state=ok] .i { color: var(--ok); }
+.pill[data-state=warn] { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+.tipwrap { position: relative; }
+.tip { position: absolute; z-index: 30; bottom: calc(100% + 10px); right: 0; width: 290px; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--ink); color: var(--panel-solid); font-size: 13px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s; box-shadow: var(--shadow); }
+.tip.down { bottom: auto; top: calc(100% + 8px); }
+.tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; visibility: visible; }
+.pop { position: absolute; z-index: 40; background: var(--panel-solid); border-radius: var(--r-ctl); box-shadow: var(--shadow); padding: 6px; min-width: 250px; border: 1px solid var(--hair); }
+.pop[hidden] { display: none; }
+.pop.up { bottom: calc(100% + 8px); right: 0; }
+.mi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; font-size: 13.5px; }
+.mi:hover, .mi:focus-visible { background: var(--panel-2); outline: none; }
+.mi small { margin-left: auto; color: var(--ink-3); padding-left: 10px; }
+.mi .i { color: var(--ink-3); width: 17px; height: 17px; }
+.msep { height: 1px; background: var(--hair); margin: 5px 4px; }
+.pnote { margin: 4px 10px 6px; font-size: 12px; color: var(--ink-3); max-width: 260px; }
+.techpanel { padding: 10px 12px; width: 340px; }
+.techpanel dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 6px 0 0; font-size: 12.5px; }
+.techpanel dt { color: var(--ink-3); } .techpanel dd { margin: 0; word-break: break-all; }
+.techpanel h3 { margin: 0; font-size: 13px; font-weight: 600; }
+
+.lanes-wrap { display: grid; grid-template-columns: 74px minmax(0, 1fr); min-height: 0; }
+.gut { display: grid; grid-template-rows: 22px 52px 28px 18px 16px; row-gap: 3px; font-size: 11.5px; color: var(--ink-3); }
+.gut div { display: flex; align-items: center; padding-left: 6px; }
+.lanes { position: relative; display: grid; grid-template-rows: 22px 52px 28px 18px 16px; row-gap: 3px; cursor: text; touch-action: none; }
+.pins { position: relative; }
+.pin { position: absolute; top: 1px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px 0 5px; border: 0; border-radius: 999px; background: var(--panel-2); color: var(--ink-2); font-size: 11.5px; cursor: pointer; white-space: nowrap; z-index: 3; }
+.pin .i { width: 13px; height: 13px; }
+.pin:hover { background: var(--ink); color: var(--panel-solid); }
+.pin.compact .t { display: none; }
+.pin.compact { padding: 0 5px; }
+.pin[data-type=gap] { color: var(--warn); background: var(--warn-bg); }
+.chart { position: relative; }
+.chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.alt-l { fill: none; stroke: var(--ink-3); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.alt-a { fill: var(--ink-3); opacity: .1; }
+.spd-l { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.covs { display: grid; grid-template-rows: 1fr 1fr; gap: 3px; padding: 2px 0; }
+.cov { position: relative; border-radius: 3px; background: var(--ink-3); opacity: .55; }
+.cov .gaph { position: absolute; top: -1px; bottom: -1px; border-radius: 2px; background: repeating-linear-gradient(135deg, var(--warn) 0 2px, transparent 2px 5px); box-shadow: 0 0 0 1px var(--warn); }
+.axis { position: relative; font-size: 11px; color: var(--ink-3); }
+.axis span { position: absolute; top: 1px; transform: translateX(-50%); white-space: nowrap; }
+.band { position: absolute; top: 25px; bottom: 19px; background: repeating-linear-gradient(135deg, rgba(79, 92, 104, .2) 0 3px, transparent 3px 7px); pointer-events: none; min-width: 3px; }
+.sel { position: absolute; top: 22px; bottom: 16px; background: var(--sel-wash); box-shadow: inset 2px 0 0 var(--sel), inset -2px 0 0 var(--sel); pointer-events: none; z-index: 1; }
+.sel[hidden] { display: none; }
+.sel-h { position: absolute; top: 50%; width: 14px; height: 30px; margin-top: -15px; border: 0; padding: 0; border-radius: 7px; background: var(--sel); pointer-events: auto; cursor: ew-resize; z-index: 4; box-shadow: 0 0 0 2px var(--panel-solid); }
+.sel-h::after { content: ''; position: absolute; left: 6px; top: 9px; bottom: 9px; width: 2px; background: rgba(255, 255, 255, .7); border-radius: 1px; }
+.sel-h.a { left: -7px; } .sel-h.b { right: -7px; }
+.sel-bar { position: absolute; left: 8px; right: 8px; top: 0; height: 100%; pointer-events: auto; cursor: grab; }
+.playhead { position: absolute; top: 18px; bottom: 14px; width: 2px; margin-left: -1px; background: var(--vehicle); z-index: 5; pointer-events: none; }
+.playhead::before { content: ''; position: absolute; left: -5px; top: -6px; width: 12px; height: 12px; border-radius: 50%; background: var(--vehicle); box-shadow: 0 0 0 2px var(--panel-solid); }
+.hoverline { position: absolute; top: 22px; bottom: 16px; width: 1px; background: var(--ink-3); pointer-events: none; display: none; z-index: 4; }
+.hovertip { position: absolute; top: -30px; transform: translateX(-50%); padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--panel-solid); font-size: 12px; white-space: nowrap; pointer-events: none; display: none; z-index: 6; }
+.toast { position: fixed; z-index: 90; left: 50%; top: 18px; transform: translate(-50%, -8px); padding: 10px 14px; border-radius: var(--r-ctl); background: var(--ink); color: var(--panel-solid); font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; box-shadow: var(--shadow); max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.mobile-only { display: none; }
+@media (prefers-reduced-motion: reduce) { .playing .fr.on { animation: none; } .fr, .toast, .tip { transition: none; } }
+@media (max-width: 1180px) { :root { --drawer: 280px; --dock: 340px; } .read div:nth-child(3) { display: none; } }
+
+/* ---------- celular: o mapa continua no topo; painéis viram blocos ---------- */
+@media (max-width: 760px) {
+  body { overflow: auto; overflow-x: hidden; }
+  .app { height: auto; overflow: visible; display: flex; flex-direction: column; gap: 10px; padding: 0 var(--gut-r) 24px var(--gut-l); }
+  .mapwrap { position: relative; inset: auto; height: 340px; margin: 0 calc(-1 * var(--gut-r)) 0 calc(-1 * var(--gut-l)); order: 1; }
+  .float { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: auto; }
+  .drawer { order: 4; height: auto; }
+  .dlist { overflow: visible; }
+  .dock { order: 2; margin-top: -54px; z-index: 2; }
+  .dock .vids { grid-template-columns: 1fr 1fr; }
+  .dock .dockh b { font-size: 14px; }
+  .dock .seg button { padding: 0 8px; }
+  .vlabel { font-size: 11px; height: 22px; padding: 0 7px; left: 6px; top: 6px; }
+  .vexp { display: none; }
+  .strip { order: 3; height: auto; padding: 10px 12px 12px 10px; grid-template-rows: auto auto; }
+  .bar { flex-wrap: wrap; row-gap: 8px; gap: 10px; }
+  .read { order: 5; width: 100%; border-left: 0; padding-left: 4px; justify-content: space-between; }
+  .read div:nth-child(3) { display: grid; }
+  .clock b { font-size: 21px; }
+  .grow { display: none; }
+  .bar .rate { margin-left: auto; }
+  .selchip, .bar .tipwrap, .bar .morewrap { order: 6; }
+  .selchip .lbl { display: none; }
+  .lanes-wrap { grid-template-columns: 46px minmax(0, 1fr); margin-top: 8px; }
+  .gut .lg { display: none; }
+  .pin .t { display: none; }
+  .legend { position: absolute; left: var(--gut-l); bottom: 66px; right: auto; padding: 5px 9px; gap: 10px; font-size: 11px; }
+  .legend .ramp i { width: 60px; }
+  .mapctl { right: var(--gut-r); bottom: auto; top: 64px; }
+  .mapctl button { width: 34px; height: 34px; }
+  .mobile-only { display: flex; }
+  .mtop { position: absolute; z-index: 3; left: var(--gut-l); right: var(--gut-r); top: 12px; display: flex; gap: 8px; }
+  .mtop .tripbtn { flex: 1; display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 12px; border: 0; border-radius: var(--r-ctl); background: var(--panel); box-shadow: var(--shadow); font-weight: 600; cursor: pointer; }
+  .mtop .tripbtn span { font-weight: 400; color: var(--ink-2); }
+  .mtop .icon { background: var(--panel); box-shadow: var(--shadow); height: 42px; width: 42px; }
+  .dhead .icon { display: none; }
+  .coordpop { min-width: 200px; }
+  .pop.up { right: auto; left: 0; }
+  .tip { right: auto; left: 0; width: min(290px, calc(100vw - 48px)); }
+  .dockh .tipwrap { position: static; }
+  .dockh .tip { left: 12px; right: 12px; width: auto; top: 50px; }
+  .techpanel { width: calc(100vw - 48px); }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="mapwrap" id="mapwrap">
+    <svg class="map" id="map" role="img" aria-label="Mapa da viagem colorido pela velocidade. Clique num ponto para ir até ele; arraste para mover." preserveAspectRatio="none"></svg>
+    <div class="callout" id="callout" aria-hidden="true"><b id="coClock">10:03:02</b><span id="coSpeed">57 km/h</span></div>
+    <div class="coordpop float" id="coordPop" role="dialog" aria-label="Ponto escolhido no mapa" hidden>
+      <b id="cpText"></b><small id="cpMeta"></small>
+      <div class="row"><button class="btn s" id="cpCopy"><svg class="i"><use href="#i-copy"/></svg>Copiar coordenada</button><button class="btn s" id="cpClose" aria-label="Fechar"><svg class="i"><use href="#i-x"/></svg></button></div>
+    </div>
+    <div class="legend float" aria-label="Legenda">
+      <span class="ramp">devagar <i></i> rápido</span>
+      <span class="scale" id="scale"><span id="scaleLbl">5 km</span><i id="scaleBar" style="width:80px"></i></span>
+    </div>
+    <div class="mapctl">
+      <div class="grp">
+        <button id="zIn" title="Aproximar"><svg class="i"><use href="#i-plus"/></svg><span class="sr">Aproximar</span></button>
+        <button id="zOut" title="Afastar"><svg class="i"><use href="#i-minus"/></svg><span class="sr">Afastar</span></button>
+      </div>
+      <div class="grp">
+        <button id="follow" aria-pressed="false" title="Seguir o veículo"><svg class="i"><use href="#i-target"/></svg><span class="sr">Seguir o veículo</span></button>
+        <button id="fit" title="Ver a rota inteira"><svg class="i"><use href="#i-route"/></svg><span class="sr">Ver a rota inteira</span></button>
+      </div>
+    </div>
+    <div class="mtop mobile-only">
+      <button class="tripbtn" id="mTripBtn"><b id="mTripLbl">Sábado, 21/11</b><span id="mTripTime">09:03 – 11:54</span></button>
+      <button class="icon themebtn" title="Alternar tema claro/escuro"><svg class="i"><use href="#i-moon"/></svg><span class="sr">Alternar tema</span></button>
+    </div>
+  </div>
+
+  <aside class="float drawer" id="drawer" aria-label="Viagens">
+    <div class="dhead">
+      <span class="logo" aria-hidden="true"><svg class="i"><use href="#i-route"/></svg></span>
+      <b>Estúdio de viagem</b>
+      <button class="icon themebtn" title="Alternar tema claro/escuro"><svg class="i"><use href="#i-moon"/></svg><span class="sr">Alternar tema</span></button>
+    </div>
+    <label class="search"><svg class="i"><use href="#i-search"/></svg><span class="sr">Buscar viagem</span><input id="q" type="search" placeholder="Buscar por dia ou horário" autocomplete="off"></label>
+    <div class="dlist" id="dlist"></div>
+    <div class="hint" id="nightHint" hidden><svg class="i"><use href="#i-moon"/></svg>Viagem noturna<button id="nightBtn">Usar tema escuro</button></div>
+    <div class="dfoot">Protótipo — dados de exemplo da viagem de 21/11. Reprodução acelerada 60×; mapa e quadros ilustrativos.</div>
+  </aside>
+
+  <section class="float dock" id="dock" aria-label="Câmeras">
+    <div class="dockh">
+      <b>Câmeras</b>
+      <div class="tipwrap">
+        <button class="lockbtn" id="lockBtn" aria-pressed="true" aria-describedby="lockTip"><svg class="i"><use href="#i-link"/></svg><span class="sr" id="lockLbl">Câmeras sincronizadas</span></button>
+        <div class="tip down" role="tooltip" id="lockTip">Sincronizadas: reproduzir, pausar e pular valem para as duas câmeras. Clique para deixar a traseira parada e compará-la com outro momento.</div>
+      </div>
+      <div class="seg" role="group" aria-label="Câmeras visíveis">
+        <button data-view="both" aria-pressed="true">Ambas</button><button data-view="front" aria-pressed="false">Frente</button><button data-view="rear" aria-pressed="false">Trás</button>
+      </div>
+    </div>
+    <div class="vids" id="vids">
+      <div class="vid" data-cam="front" id="vFront">
+        <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+        <span class="vlabel">Câmera dianteira</span>
+        <button class="vexp" id="bigBtn" aria-pressed="false" title="Ampliar vídeos"><svg class="i"><use href="#i-expand"/></svg><span class="sr">Ampliar vídeos</span></button>
+        <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação dianteira neste trecho</div>
+      </div>
+      <div class="vid" data-cam="rear" id="vRear">
+        <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+        <span class="vlabel">Câmera traseira</span>
+        <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação traseira neste trecho</div>
+        <span class="held" id="held"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="float strip" aria-label="Reprodução e telemetria">
+    <div class="bar">
+      <div class="tc">
+        <button class="tb" id="back" title="Voltar 10 s (←)"><svg class="i"><use href="#i-back10"/></svg><span class="sr">Voltar 10 segundos</span></button>
+        <button class="tb play" id="play" title="Reproduzir (espaço)"><svg class="i" id="playIco"><use href="#i-play"/></svg><span class="sr" id="playLbl">Reproduzir</span></button>
+        <button class="tb" id="fwd" title="Avançar 10 s (→)"><svg class="i"><use href="#i-fwd10"/></svg><span class="sr">Avançar 10 segundos</span></button>
+      </div>
+      <div class="clock"><b id="clock">10:03:02</b><span id="elapsed">1:00:02 de 2:51:31</span></div>
+      <div class="seg rate" role="group" aria-label="Velocidade de reprodução"><button data-rate="1" aria-pressed="true">1×</button><button data-rate="2" aria-pressed="false">2×</button><button data-rate="4" aria-pressed="false">4×</button></div>
+      <div class="read" aria-live="off">
+        <div><b id="rSpd">57<small>km/h</small></b><span>velocidade</span></div>
+        <div><b id="rAlt">171<small>m</small></b><span>altitude</span></div>
+        <div><b id="rKm">38,2<small>km</small></b><span id="rKmOf">de 118,3 km</span></div>
+      </div>
+      <div class="grow"></div>
+      <div class="selchip" id="selChip"><i></i><span id="selTxt">09:54–10:15</span><span class="lbl" id="selMeta"></span>
+        <button class="btn s" id="expBtn" aria-haspopup="menu" aria-controls="expPop"><svg class="i"><use href="#i-download"/></svg>Exportar trecho</button>
+        <button class="icon" id="selClear" style="width:28px;height:28px" title="Limpar trecho"><svg class="i"><use href="#i-x"/></svg><span class="sr">Limpar trecho</span></button>
+        <div class="pop up" id="expPop" role="menu" aria-label="Formato do arquivo">
+          <button class="mi" role="menuitem" data-fmt="gpx" data-close>GPX<small>Garmin, Strava, OsmAnd</small></button>
+          <button class="mi" role="menuitem" data-fmt="kml" data-close>KML<small>Google Earth, My Maps</small></button>
+          <p class="pnote">Exporta só o traçado do trecho. Em outro aplicativo, a rota pode não seguir exatamente as mesmas ruas.</p>
+        </div>
+      </div>
+      <button class="btn" id="selNew" hidden><svg class="i"><use href="#i-markIn"/></svg>Selecionar trecho</button>
+      <div class="tipwrap">
+        <button class="pill" id="syncPill" aria-describedby="syncTip"><svg class="i"><use href="#i-check"/></svg><span class="lbl">Vídeo e GPS alinhados</span></button>
+        <div class="tip" role="tooltip" id="syncTip"></div>
+      </div>
+      <div class="morewrap" style="position:relative">
+        <button class="icon" id="moreBtn" aria-haspopup="menu" aria-controls="morePop" title="Mais ações"><svg class="i"><use href="#i-more"/></svg><span class="sr">Mais ações</span></button>
+        <div class="pop up" id="morePop" role="menu" aria-label="Mais ações">
+          <button class="mi" role="menuitem" data-act="copy" data-close><svg class="i"><use href="#i-copy"/></svg>Copiar coordenada deste ponto</button>
+          <button class="mi" role="menuitem" data-act="in" data-close><svg class="i"><use href="#i-markIn"/></svg>Marcar início aqui<small>I</small></button>
+          <button class="mi" role="menuitem" data-act="out" data-close><svg class="i"><use href="#i-markOut"/></svg>Marcar fim aqui<small>O</small></button>
+          <div class="msep" role="separator"></div>
+          <button class="mi" role="menuitem" data-act="gpx" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>GPX</small></button>
+          <button class="mi" role="menuitem" data-act="kml" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>KML</small></button>
+          <div class="msep" role="separator"></div>
+          <button class="mi" role="menuitem" data-act="tech"><svg class="i"><use href="#i-info"/></svg>Detalhes técnicos</button>
+          <button class="mi" role="menuitem" data-act="keys"><svg class="i"><use href="#i-keyboard"/></svg>Atalhos de teclado</button>
+          <div id="techBox" class="techpanel" hidden></div>
+        </div>
+      </div>
+    </div>
+    <div class="lanes-wrap">
+      <div class="gut" aria-hidden="true"><div>Marcos</div><div>km/h<span class="lg">&nbsp;</span></div><div>m</div><div>Vídeo</div><div></div></div>
+      <div class="lanes" id="lanes" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="100" aria-valuenow="35">
+        <div class="pins" id="pins"></div>
+        <div class="chart"><svg viewBox="0 0 1000 52" preserveAspectRatio="none" aria-hidden="true">
+          <defs><linearGradient id="spdGrad" gradientUnits="userSpaceOnUse" x1="0" y1="52" x2="0" y2="0">
+            <stop offset="0" stop-color="var(--s0)"/><stop offset=".3" stop-color="var(--s1)"/><stop offset=".55" stop-color="var(--s2)"/><stop offset=".8" stop-color="var(--s3)"/><stop offset="1" stop-color="var(--s4)"/></linearGradient></defs>
+          <path id="spdA" fill="url(#spdGrad)" opacity=".28"/><path id="spdL" class="spd-l" stroke="url(#spdGrad)"/></svg></div>
+        <div class="chart"><svg viewBox="0 0 1000 28" preserveAspectRatio="none" aria-hidden="true"><path id="altA" class="alt-a"/><path id="altL" class="alt-l"/></svg></div>
+        <div class="covs" title="Cobertura das câmeras (frente em cima, trás embaixo)"><div class="cov" id="covF"></div><div class="cov" id="covR"></div></div>
+        <div class="axis" id="axis"></div>
+        <div id="overlay"></div>
+        <div class="sel" id="sel" hidden><div class="sel-bar" id="selBar" title="Arraste para mover o trecho"></div><button class="sel-h a" id="selA" aria-label="Início do trecho"></button><button class="sel-h b" id="selB" aria-label="Fim do trecho"></button></div>
+        <div class="playhead" id="playhead"></div>
+        <div class="hoverline" id="hoverLine"></div>
+        <div class="hovertip" id="hoverTip"></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="mock-data.js"></script>
+<script src="proto-core.js"></script>
+<style>
+/* estilos do mapa (classes aplicadas ao SVG gerado) */
+.m-land { fill: var(--land); } .m-water { fill: var(--water); } .m-park { fill: var(--park); } .m-town { fill: var(--town); }
+.m-river { fill: none; stroke: var(--water); stroke-width: 3.5; vector-effect: non-scaling-stroke; }
+.m-contour { fill: none; stroke: var(--contour); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.m-cas { fill: none; stroke: var(--casing); stroke-width: 3.6; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-road { fill: none; stroke: var(--road); stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-mcas { fill: none; stroke: var(--major-casing); stroke-width: 7; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-major { fill: none; stroke: var(--road); stroke-width: 4.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-street { fill: none; stroke: var(--road); stroke-width: .9; vector-effect: non-scaling-stroke; opacity: .8; }
+.m-rcas { fill: none; stroke: var(--panel-solid); stroke-width: 9; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-seg { fill: none; stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-rest { fill: none; stroke: var(--land); stroke-opacity: .55; stroke-width: 5.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-sel { fill: none; stroke: var(--sel); stroke-opacity: .5; stroke-width: 15; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.m-idle { fill: none; stroke: var(--stop); stroke-width: 2; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+</style>
+<script>
+(function () {
+  'use strict';
+  const P = window.Proto; P.injectIcons();
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement, app = $('app'), player = P.player(), svg = $('map');
+  const SPD = [30, 60, 80, 100];   /* limites dos 5 degraus da rampa, em km/h */
+  const bucket = (v) => SPD.filter((x) => v >= x).length;
+  const isMobile = () => matchMedia('(max-width: 760px)').matches;
+  let rearHold = null, lastIdx = -1, lastMark = '', coordF = null;
+
+  /* ---------- tema ---------- */
+  const darkNow = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  function setTheme(mode) {
+    root.dataset.theme = mode;
+    try { localStorage.setItem('estudio-b-theme', mode); } catch (e) {}
+    document.querySelectorAll('.themebtn use').forEach((u) => u.setAttribute('href', mode === 'dark' ? '#i-sun' : '#i-moon'));
+    nightHint();
+  }
+  try { const m = localStorage.getItem('estudio-b-theme'); if (m) root.dataset.theme = m; } catch (e) {}
+  document.querySelectorAll('.themebtn').forEach((b) => b.addEventListener('click', () => setTheme(darkNow() ? 'light' : 'dark')));
+  document.querySelectorAll('.themebtn use').forEach((u) => u.setAttribute('href', darkNow() ? '#i-sun' : '#i-moon'));
+  function nightHint() { $('nightHint').hidden = !(player.s.trip.night && !darkNow()); }
+  $('nightBtn').addEventListener('click', () => setTheme('dark'));
+
+  /* ---------- mapa ---------- */
+  const insets = () => {
+    if (isMobile()) return {l: 20, r: 60, t: 66, b: 74};
+    const W = innerWidth, H = innerHeight, d = $('drawer').getBoundingClientRect(), k = $('dock').getBoundingClientRect(), s = document.querySelector('.strip').getBoundingClientRect();
+    return {l: d.right + 28, r: W - k.left + 28, t: 40, b: H - s.top + 56};
+  };
+  const mv = P.mapView(svg, player.s.trip, insets);
+  function buildMap(t) {
+    const S = P.scenery(t), n = t.route.length - 1;
+    const segs = []; let cur = null;
+    t.route.forEach((p, i) => {
+      const b = bucket(P.val(t.speed, i / n));
+      if (!cur || cur.b !== b) { if (cur) cur.pts.push(p); cur = {b, pts: cur ? [cur.pts[cur.pts.length - 1], p] : [p]}; segs.push(cur); }
+      else cur.pts.push(p);
+    });
+    const stops = t.marks.filter((m) => m.type === 'stop');
+    svg.innerHTML = `
+      <rect class="m-land" x="-6000" y="-6000" width="13000" height="13000"/>
+      ${S.contours.map((d) => `<path class="m-contour" d="${d}"/>`).join('')}
+      ${S.parks.map((d) => `<path class="m-park" d="${d}"/>`).join('')}
+      ${S.towns.map((w) => `<circle class="m-town" cx="${w.x}" cy="${w.y}" r="${w.r * 1.05}"/>`).join('')}
+      ${S.water.map((d) => `<path class="m-water" d="${d}"/>`).join('')}
+      ${S.land.map((d) => `<path class="m-land" d="${d}"/>`).join('')}
+      ${S.waterLines.map((d) => `<path class="m-river" d="${d}"/>`).join('')}
+      ${S.towns.map((w) => `<path class="m-street" d="${w.d}"/>`).join('')}
+      ${S.minor.map((d) => `<path class="m-cas" d="${d}"/>`).join('')}${S.minor.map((d) => `<path class="m-road" d="${d}"/>`).join('')}
+      ${S.major.concat(S.bridges).map((d) => `<path class="m-mcas" d="${d}"/>`).join('')}${S.major.concat(S.bridges).map((d) => `<path class="m-major" d="${d}"/>`).join('')}
+      <path class="m-sel" id="mSel"/>
+      <path class="m-rcas" d="${P.line(t.route)}"/>
+      ${segs.map((s) => `<path class="m-seg" d="${P.line(s.pts)}" style="stroke:var(--s${s.b})"/>`).join('')}
+      ${stops.map((m) => `<path class="m-idle" d="${P.line(P.routeSlice(t, m.f, m.to))}"/>`).join('')}
+      <path class="m-rest" id="mRest"/>
+      <g id="mMarks"></g>
+      <g id="mCar"><path d="M0 0 L-9 -26 A27 27 0 0 1 9 -26 Z" fill="var(--vehicle)" opacity=".22" id="mCone"/><circle r="13" fill="var(--vehicle-halo)"/><circle r="7" fill="var(--vehicle)" stroke="#fff" stroke-width="2.5"/></g>`;
+    const a = t.route[0], z = t.route[n], mx = P.pos(t, t.max_speed_at);
+    $('mMarks').innerHTML =
+      `<g class="mk" data-x="${a[0]}" data-y="${a[1]}"><circle r="7" fill="var(--panel-solid)" stroke="var(--ink)" stroke-width="2.5"/></g>` +
+      `<g class="mk" data-x="${z[0]}" data-y="${z[1]}"><circle r="8" fill="var(--ink)"/><circle r="3" fill="var(--panel-solid)"/></g>` +
+      stops.map((m) => { const p = P.pos(t, m.f); return `<g class="mk" data-x="${p.x}" data-y="${p.y}"><g transform="translate(0 -20)"><rect x="-23" y="-11" width="46" height="22" rx="11" fill="var(--panel-solid)" stroke="var(--hair)"/><rect x="-19" y="-7" width="14" height="14" rx="3.5" fill="var(--stop)"/><text x="-12" y="4" text-anchor="middle" font-size="10" font-weight="700" fill="var(--panel-solid)" font-family="Albert Sans, sans-serif">P</text><text x="1" y="4.5" font-size="11.5" font-weight="600" fill="var(--ink)" font-family="Albert Sans, sans-serif">${P.num(Math.round(m.minutes))}m</text></g></g>`; }).join('') +
+      `<g class="mk" data-x="${mx.x}" data-y="${mx.y}"><g transform="translate(0 -20)"><rect x="-22" y="-11" width="44" height="22" rx="11" fill="var(--ink)"/><text y="4.5" text-anchor="middle" font-size="12" font-weight="700" fill="var(--panel-solid)" font-family="Albert Sans, sans-serif">${P.num(Math.round(t.max_speed))}</text></g><circle r="3.5" fill="var(--ink)"/></g>`;
+    lastIdx = -1;
+  }
+  function placeMarks() {
+    const k = mv.unitsPerPx();
+    svg.querySelectorAll('.mk').forEach((g) => g.setAttribute('transform', `translate(${g.dataset.x} ${g.dataset.y}) scale(${k})`));
+    const t = player.s.trip, kmPx = t.kmPerUnit * k, nice = [0.5, 1, 2, 5, 10, 20, 50].find((v) => v / kmPx >= 56) || 50;
+    $('scaleLbl').textContent = `${P.num(nice, nice < 1 ? 1 : 0)} km`; $('scaleBar').style.width = Math.round(nice / kmPx) + 'px';
+    placeCar(); placeCoord();
+  }
+  function toPx(x, y) { const vb = mv.vb, r = svg.getBoundingClientRect(); return {x: (x - vb.x) / vb.w * r.width, y: (y - vb.y) / vb.h * r.height}; }
+  function placeCar() {
+    const s = player.s, t = s.trip, p = P.pos(t, s.f), k = mv.unitsPerPx();
+    $('mCar').setAttribute('transform', `translate(${p.x} ${p.y}) scale(${k})`);
+    $('mCone').setAttribute('transform', `rotate(${p.heading + 90})`);
+    const q = toPx(p.x, p.y); $('callout').style.left = q.x + 'px'; $('callout').style.top = q.y + 'px';
+  }
+  function placeCoord() { if (coordF === null || $('coordPop').hidden) return; const p = P.pos(player.s.trip, coordF), q = toPx(p.x, p.y); $('coordPop').style.left = q.x + 'px'; $('coordPop').style.top = q.y + 'px'; }
+  mv.onchange = placeMarks;
+  mv.interactive((x, y) => {
+    const t = player.s.trip, hit = P.nearest(t, x, y);
+    player.seek(hit.f); coordF = hit.f;
+    $('cpText').textContent = P.coord(t, hit.f).text;
+    $('cpMeta').textContent = `Às ${P.clock(t, hit.f)}, a ${P.num(P.val(t.speed, hit.f), 0)} km/h`;
+    $('coordPop').hidden = false; placeCoord();
+  });
+  $('cpClose').addEventListener('click', () => { $('coordPop').hidden = true; });
+  $('cpCopy').addEventListener('click', () => copyCoord($('cpText').textContent));
+  function copyCoord(text) { P.copy(text).then((ok) => P.toast($('toast'), ok ? `Coordenada copiada: ${text}` : 'Não foi possível copiar. Selecione o texto e copie manualmente.')); }
+  $('zIn').addEventListener('click', () => mv.zoom(1.5)); $('zOut').addEventListener('click', () => mv.zoom(1 / 1.5));
+  $('follow').addEventListener('click', () => { const v = !mv.following; mv.follow(v); $('follow').setAttribute('aria-pressed', v); if (v) { mv.zoom(2.5); renderTime(player.s); } });
+  $('fit').addEventListener('click', () => { mv.follow(false); $('follow').setAttribute('aria-pressed', 'false'); mv.fit(); });
+
+  /* ---------- gaveta de viagens ---------- */
+  function renderList() {
+    const q = $('q').value.trim().toLowerCase(), cur = player.s.trip, byDay = {};
+    P.trips.filter((t) => !q || `${t.dayLong} ${t.dayShort} ${P.clock(t, 0, false)} ${P.clock(t, 1, false)} ${t.period}`.toLowerCase().includes(q))
+      .forEach((t) => (byDay[t.dayLong] = byDay[t.dayLong] || []).push(t));
+    const days = Object.entries(byDay);
+    $('dlist').innerHTML = days.length ? days.map(([day, list]) => {
+      const km = list.reduce((a, t) => a + t.distance_km, 0);
+      return `<div class="dayh"><b>${P.cap(day)}</b><span>${list.length} viage${list.length > 1 ? 'ns' : 'm'}, ${P.num(km, 0)} km</span></div>` + list.map((t) => {
+        const th = P.renderThumb(t, 64, 48, 7), sy = P.syncText(t), on = t.index === cur.index;
+        const stopN = t.marks.filter((m) => m.type === 'stop').length;
+        return `<button class="trip" data-trip="${t.index}" aria-current="${on}">
+          <svg viewBox="0 0 64 48" aria-hidden="true"><path d="${th.d}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${th.a[0]}" cy="${th.a[1]}" r="2.6" fill="var(--panel-solid)" stroke="var(--ink)" stroke-width="1.4"/><circle cx="${th.b[0]}" cy="${th.b[1]}" r="2.8" fill="var(--ink)"/></svg>
+          <span class="tt"><b>${P.clock(t, 0, false)} – ${P.clock(t, 1, false)}</b><span>${P.num(t.distance_km, 0)} km em ${P.dur(t.duration_min)}</span>
+          <span class="tags">${t.night ? `<span class="tag">${P.icon('moon')}Noite</span>` : ''}${sy.state === 'warn' ? `<span class="tag warn">${P.icon('warn')}Sinc. parcial</span>` : ''}${stopN ? `<span class="tag">${P.icon('stop')}${stopN} parada${stopN > 1 ? 's' : ''}</span>` : ''}</span></span></button>` +
+          (on ? `<div class="detail"><div class="kpis"><div><b>${P.num(Math.round(t.max_speed))}<small>km/h</small></b><span>máxima</span></div><div><b>${P.num(Math.round(t.avg_speed))}<small>km/h</small></b><span>média</span></div><div><b>${P.num(Math.max(...t.altitude), 0)}<small>m</small></b><span>mais alto</span></div></div>
+            <ul class="mlist" id="mlist">${t.marks.map((m, i) => `<li data-i="${i}"><button data-f="${m.f}">${P.icon(P.markIcon[m.type])}<span>${m.label}</span><time>${P.clock(t, m.f, false)}</time></button></li>`).join('')}</ul></div>` : '');
+      }).join('');
+    }).join('') : `<p class="pnote">Nenhuma viagem encontrada para “${q.replace(/[<>&]/g, '')}”. Tente um dia (21/11) ou um horário (09:03).</p>`;
+    lastMark = '';
+  }
+  $('q').addEventListener('input', renderList);
+  $('dlist').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip]'); if (b && +b.dataset.trip !== player.s.trip.index) { player.setTrip(+b.dataset.trip); return; }
+    const m = e.target.closest('[data-f]'); if (m) player.seek(+m.dataset.f);
+  });
+  $('mTripBtn').addEventListener('click', () => $('drawer').scrollIntoView({behavior: P.reduced ? 'auto' : 'smooth'}));
+
+  /* ---------- câmeras ---------- */
+  document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    $('vids').className = 'vids' + (b.dataset.view === 'both' ? '' : ' only-' + b.dataset.view);
+    requestAnimationFrame(() => mv.fit());
+  }));
+  $('bigBtn').addEventListener('click', () => { const on = !$('dock').classList.contains('big'); $('dock').classList.toggle('big', on); $('bigBtn').setAttribute('aria-pressed', on); $('bigBtn').querySelector('use').setAttribute('href', on ? '#i-collapse' : '#i-expand'); });
+  $('lockBtn').addEventListener('click', () => { const v = !player.s.linked; rearHold = v ? null : player.s.f; player.setLinked(v); });
+
+  /* ---------- transporte, menus, atalhos ---------- */
+  $('play').addEventListener('click', () => player.toggle());
+  $('back').addEventListener('click', () => player.nudge(-10));
+  $('fwd').addEventListener('click', () => player.nudge(10));
+  document.querySelectorAll('[data-rate]').forEach((b) => b.addEventListener('click', () => player.setRate(+b.dataset.rate)));
+  P.popover($('expBtn'), $('expPop'));
+  $('expPop').addEventListener('click', (e) => { const b = e.target.closest('[data-fmt]'); if (b) P.toast($('toast'), `Trecho exportado: ${P.exportName(player.s.trip, player.s.sel, b.dataset.fmt)}`); });
+  $('selClear').addEventListener('click', () => player.setSel(null));
+  $('selNew').addEventListener('click', () => player.setSel({a: player.s.f, b: Math.min(1, player.s.f + 0.06)}));
+  P.popover($('moreBtn'), $('morePop'), () => { $('techBox').hidden = true; });
+  $('morePop').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const t = player.s.trip, a = b.dataset.act;
+    if (a === 'copy') copyCoord(P.coord(t, player.s.f).text);
+    if (a === 'in') player.markIn();
+    if (a === 'out') player.markOut();
+    if (a === 'gpx' || a === 'kml') P.toast($('toast'), `Exportado ${P.exportName(t, null, a)} (só o traçado)`);
+    if (a === 'tech') { $('techBox').hidden = false; $('techBox').innerHTML = `<h3>Detalhes técnicos</h3><dl><dt>Vídeo dianteiro</dt><dd>${t.files.front}</dd><dt>Vídeo traseiro</dt><dd>${t.files.rear}</dd><dt>Duração do vídeo</dt><dd>${P.hms(t.video_duration_s)} de ${P.hms(t.elapsed_s)} de GPS (${P.num(t.video_duration_s / t.elapsed_s * 100, 0)}%)</dd><dt>Pontos GPS</dt><dd>${P.num(t.gpsPoints)} registros</dd><dt>Sincronização</dt><dd>${t.sync.status}, confiança ${t.sync.confidence === 'high' ? 'alta' : t.sync.confidence}</dd><dt>Importação</dt><dd>153 arquivos traseiros e 153 dianteiros unidos</dd></dl>`; }
+    if (a === 'keys') { $('techBox').hidden = false; $('techBox').innerHTML = `<h3>Atalhos de teclado</h3><dl><dt>Espaço</dt><dd>Reproduzir ou pausar</dd><dt>← →</dt><dd>Voltar ou avançar 10 s (Shift: 1 min)</dd><dt>I e O</dt><dd>Marcar início e fim do trecho</dd><dt>F</dt><dd>Seguir o veículo</dd><dt>+ e −</dt><dd>Aproximar ou afastar o mapa</dd></dl>`; }
+  });
+  P.keys(player, (e) => {
+    if (e.key === 'f' || e.key === 'F') $('follow').click();
+    if (e.key === '+' || e.key === '=') mv.zoom(1.5);
+    if (e.key === '-') mv.zoom(1 / 1.5);
+  });
+
+  /* ---------- faixa de telemetria ---------- */
+  const lanes = $('lanes');
+  P.scrub(lanes, player, '.sel-h, .sel-bar, .pin');
+  P.dragSel($('selA'), lanes, player, 'a'); P.dragSel($('selB'), lanes, player, 'b'); P.dragSel($('selBar'), lanes, player, 'body');
+  P.hover(lanes, (f) => {
+    const hl = $('hoverLine'), tip = $('hoverTip');
+    if (f === null) { hl.style.display = tip.style.display = 'none'; return; }
+    const t = player.s.trip; hl.style.display = tip.style.display = 'block'; hl.style.left = tip.style.left = f * 100 + '%';
+    tip.textContent = `${P.clock(t, f)}   ${P.num(P.val(t.speed, f), 0)} km/h   ${P.num(P.val(t.altitude, f), 0)} m`;
+  });
+  function layoutAxis(t) {
+    const w = lanes.clientWidth || 800, step = ([10, 15, 30, 60, 120].find((m) => w / (t.elapsed_s / (m * 60)) >= 64) || 120) * 60;
+    let h = '';
+    for (let s = Math.ceil(t.start / step) * step; s <= t.end; s += step) { const l = (s - t.start) / t.elapsed_s * 100; if (l > 2 && l < 98) h += `<span style="left:${l}%">${P.clockOf(s, false)}</span>`; }
+    $('axis').innerHTML = h;
+  }
+  new ResizeObserver(() => { layoutAxis(player.s.trip); P.declutter($('pins')); }).observe(lanes);
+  if (document.fonts) document.fonts.ready.then(() => P.declutter($('pins')));
+
+  /* ---------- render ---------- */
+  function renderStatic(t) {
+    renderList(); nightHint();
+    $('mTripLbl').textContent = `${P.cap(t.weekday)}, ${t.dayShort}`; $('mTripTime').textContent = `${P.clock(t, 0, false)} – ${P.clock(t, 1, false)}`;
+    const sy = P.syncText(t);
+    $('syncPill').dataset.state = sy.state; $('syncPill').querySelector('.lbl').textContent = sy.label;
+    $('syncPill').querySelector('use').setAttribute('href', sy.state === 'ok' ? '#i-check' : '#i-warn'); $('syncTip').textContent = sy.tip;
+    $('rKmOf').textContent = `de ${P.num(t.distance_km, 1)} km`;
+    const sp = P.seriesPath(t.speed, 1000, 52, 0, Math.max(140, t.max_speed), 3);
+    $('spdA').setAttribute('d', sp.area); $('spdL').setAttribute('d', sp.line);
+    const lo = Math.min(...t.altitude), hi = Math.max(...t.altitude), ap = P.seriesPath(t.altitude, 1000, 28, lo - (hi - lo) * .05, hi, 2);
+    $('altA').setAttribute('d', ap.area); $('altL').setAttribute('d', ap.line);
+    $('pins').innerHTML = t.marks.filter((m) => ['stop', 'max', 'gap', 'climb', 'descent'].includes(m.type)).map((m) =>
+      `<button class="pin" data-type="${m.type}" data-f="${m.f}" style="left:${m.f * 100}%;${m.f < .05 ? 'transform:translateX(-8%);' : m.f > .95 ? 'transform:translateX(-92%);' : ''}" title="${m.label}, às ${P.clock(t, m.f, false)}">${P.icon(P.markIcon[m.type])}<span class="t">${m.type === 'stop' ? 'Parada ' + P.num(Math.round(m.minutes)) + ' min' : m.type === 'max' ? P.num(Math.round(t.max_speed)) + ' km/h' : m.type === 'gap' ? 'Sem vídeo traseiro' : (m.type === 'climb' ? 'Subida' : 'Descida')}</span><span class="sr">${m.label}</span></button>`).join('');
+    $('pins').querySelectorAll('.pin').forEach((b) => b.addEventListener('click', () => player.seek(+b.dataset.f)));
+    P.declutter($('pins'));
+    $('overlay').innerHTML = t.marks.filter((m) => m.type === 'stop').map((m) => `<div class="band" style="left:${m.f * 100}%;width:${(m.to - m.f) * 100}%"></div>`).join('');
+    ['front', 'rear'].forEach((c) => { $(c === 'front' ? 'covF' : 'covR').innerHTML = (t.gaps[c] || []).map((g) => `<div class="gaph" style="left:${g.from * 100}%;width:${(g.to - g.from) * 100}%" title="Sem vídeo ${c === 'front' ? 'dianteiro' : 'traseiro'}${g.example ? ' (exemplo)' : ''}"></div>`).join(''); });
+    $('vFront').classList.toggle('night', t.night); $('vRear').classList.toggle('night', t.night);
+    $('coordPop').hidden = true; coordF = null;
+    layoutAxis(t); buildMap(t); mv.setTrip(t);
+  }
+  function renderSel(s) {
+    const t = s.trip, sel = s.sel;
+    $('selChip').hidden = !sel; $('selNew').hidden = !!sel; $('sel').hidden = !sel;
+    if (!sel) { $('mSel').setAttribute('d', ''); return; }
+    const info = P.selInfo(t, sel);
+    $('sel').style.left = sel.a * 100 + '%'; $('sel').style.width = (sel.b - sel.a) * 100 + '%';
+    $('selTxt').textContent = `${info.from}–${info.to}`; $('selMeta').textContent = `${P.dur(info.min)}, ${P.num(info.km, 1)} km`;
+    $('selA').setAttribute('aria-valuetext', info.from); $('selB').setAttribute('aria-valuetext', info.to);
+    $('mSel').setAttribute('d', P.line(P.routeSlice(t, sel.a, sel.b)));
+  }
+  function renderState(s) {
+    $('playIco').querySelector('use').setAttribute('href', s.playing ? '#i-pause' : '#i-play');
+    $('playLbl').textContent = s.playing ? 'Pausar' : 'Reproduzir'; $('play').title = s.playing ? 'Pausar (espaço)' : 'Reproduzir (espaço)';
+    app.classList.toggle('playing', s.playing); app.classList.toggle('unlinked', !s.linked);
+    document.querySelectorAll('[data-rate]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.rate === s.rate));
+    $('lockBtn').setAttribute('aria-pressed', s.linked); $('lockBtn').querySelector('use').setAttribute('href', s.linked ? '#i-link' : '#i-unlink');
+    $('lockLbl').textContent = s.linked ? 'Câmeras sincronizadas' : 'Câmeras independentes';
+    $('lockTip').textContent = s.linked ? 'Sincronizadas: reproduzir, pausar e pular valem para as duas câmeras. Clique para deixar a traseira parada e compará-la com outro momento.' : 'Independentes: a traseira ficou parada no momento escolhido. Clique para sincronizar de novo.';
+  }
+  function renderTime(s) {
+    const t = s.trip, f = s.f, rf = s.linked || rearHold === null ? f : rearHold, clk = P.clock(t, f);
+    $('clock').textContent = clk; $('elapsed').textContent = `${P.hms(f * t.elapsed_s)} de ${P.hms(t.elapsed_s)}`;
+    const spd = P.num(P.val(t.speed, f), 0);
+    $('rSpd').innerHTML = `${spd}<small>km/h</small>`; $('rAlt').innerHTML = `${P.num(P.val(t.altitude, f), 0)}<small>m</small>`;
+    $('rKm').innerHTML = `${P.num(P.kmAt(t, f), 1)}<small>km</small>`;
+    $('coClock').textContent = clk; $('coSpeed').textContent = `${spd} km/h`;
+    $('playhead').style.left = f * 100 + '%';
+    lanes.setAttribute('aria-valuenow', Math.round(f * 100)); lanes.setAttribute('aria-valuetext', clk);
+    P.frameSwap($('vFront'), P.frameAt(t, f).front); P.frameSwap($('vRear'), P.frameAt(t, rf).rear);
+    $('vFront').classList.toggle('gap', !!P.inGap(t, 'front', f)); $('vRear').classList.toggle('gap', !!P.inGap(t, 'rear', rf));
+    $('held').textContent = `Parada em ${P.clock(t, rf)}`;
+    const p = P.pos(t, f);
+    if (mv.following) mv.center(p.x, p.y); else placeCar();
+    const idx = Math.floor(f * (t.route.length - 1));
+    if (idx !== lastIdx) { lastIdx = idx; $('mRest').setAttribute('d', P.line(P.routeSlice(t, f, 1))); }
+    let cur = -1; t.marks.forEach((m, i) => { if (m.f <= f + 1e-4) cur = i; });
+    if (t.id + cur !== lastMark && $('mlist')) { lastMark = t.id + cur; $('mlist').querySelectorAll('li').forEach((li) => li.classList.toggle('now', +li.dataset.i === cur)); }
+  }
+  player.on((s, why) => {
+    if (why === 'init' || why === 'trip') { renderStatic(s.trip); renderSel(s); renderState(s); }
+    if (why === 'sel') renderSel(s);
+    if (why === 'state') renderState(s);
+    renderTime(s);
+  });
+  $('scale').parentNode.querySelector('.ramp').innerHTML = `<span>0</span><i></i><span>100+ km/h</span>`;
+  requestAnimationFrame(() => { mv.fit(); layoutAxis(player.s.trip); renderTime(player.s); });
+})();
+</script>
+</body>
+</html>

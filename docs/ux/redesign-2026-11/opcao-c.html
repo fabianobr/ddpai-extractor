@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diário de viagens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Opção C — "Diário de viagens": biblioteca por dia + detalhe contado em capítulos.
+   Ardósia (texto) sobre cinza frio; amarelo de faixa de estrada marca o "agora" e os capítulos;
+   azul de placa de serviço para seleção e ações. Tipografia: Familjen Grotesk (títulos) + Atkinson Hyperlegible (leitura). */
+:root {
+  color-scheme: light;
+  --paper: #f2f4f6; --card: #ffffff; --card-2: #f6f8fa; --line: #dce2e8;
+  --ink: #1b2733; --ink-2: #4e5d6b; --ink-3: #85929f;
+  --yellow: #f2b705; --yellow-ink: #2a2100; --yellow-soft: #fff3c4;
+  --blue: #1d5fa8; --blue-wash: rgba(29, 95, 168, .12);
+  --green: #2f7d4f; --red: #c2381f; --gapc: #8a6a00;
+  --map-land: #e8edf0; --map-water: #c3dbeb; --map-park: #d4e7d2; --map-road: #ffffff; --map-cas: #d5dce1;
+  --shadow: 0 1px 2px rgba(27, 39, 51, .06), 0 8px 24px rgba(27, 39, 51, .08);
+  --r-card: 16px; --r-media: 12px; --r-ctl: 999px;
+  --gut-l: max(16px, env(safe-area-inset-left, 0px)); --gut-r: max(16px, env(safe-area-inset-right, 0px));
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #161d24; --card: #1f2830; --card-2: #26313a; --line: #2f3a45;
+  --ink: #e8edf1; --ink-2: #a9b5c0; --ink-3: #74818d;
+  --yellow: #f5c430; --yellow-ink: #241c00; --yellow-soft: rgba(245, 196, 48, .14);
+  --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
+  --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
+  --map-land: #1c242b; --map-water: #12293a; --map-park: #1d2c24; --map-road: #2c363f; --map-cas: #151b21;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #161d24; --card: #1f2830; --card-2: #26313a; --line: #2f3a45;
+    --ink: #e8edf1; --ink-2: #a9b5c0; --ink-3: #74818d;
+    --yellow: #f5c430; --yellow-ink: #241c00; --yellow-soft: rgba(245, 196, 48, .14);
+    --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
+    --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
+    --map-land: #1c242b; --map-water: #12293a; --map-park: #1d2c24; --map-road: #2c363f; --map-cas: #151b21;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 400 15px/1.45 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+/* números e horários na grotesca: o zero cortado da Atkinson fica só no texto corrido */
+.clock span, .dstats b, .now b, .chlist time, .axis, .card .nums, .card .when span, .dtitle span, .rng-t, .dayh span, .cal span, .st, .hovertip, .coordbar span, .selbtn, .badge, .held { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.disp { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; letter-spacing: -.015em; }
+[hidden] { display: none !important; }
+.wrap { padding: 0 var(--gut-r) 0 var(--gut-l); }
+
+/* ---------- comuns ---------- */
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--card); cursor: pointer; font-weight: 700; font-size: 14px; white-space: nowrap; text-decoration: none; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.btn.primary:hover { opacity: .92; }
+.btn.s { height: 34px; padding: 0 12px; font-size: 13.5px; }
+.btn .i { width: 17px; height: 17px; }
+.icon { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--ink-2); }
+.icon:hover { background: var(--card-2); color: var(--ink); }
+.badge { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border-radius: 999px; background: var(--card-2); color: var(--ink-2); font-size: 13px; }
+.badge .i { width: 15px; height: 15px; }
+.badge.warn { background: var(--yellow-soft); color: var(--ink); }
+.badge.warn .i { color: var(--gapc); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; cursor: help; white-space: nowrap; color: var(--ink-2); }
+.pill .i { width: 17px; height: 17px; color: var(--green); }
+.pill[data-state=warn] { background: var(--yellow-soft); border-color: transparent; color: var(--ink); }
+.pill[data-state=warn] .i { color: var(--gapc); }
+.tipwrap { position: relative; }
+.tip { position: absolute; z-index: 30; top: calc(100% + 10px); right: 0; width: 300px; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: var(--card); font-size: 14px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s; box-shadow: var(--shadow); }
+.tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; visibility: visible; }
+.pop { position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; min-width: 260px; padding: 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.pop.up { top: auto; bottom: calc(100% + 8px); }
+.mi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; text-align: left; font-size: 14.5px; }
+.mi:hover, .mi:focus-visible { background: var(--card-2); outline: none; }
+.mi .i { color: var(--ink-3); }
+.mi small { margin-left: auto; padding-left: 12px; color: var(--ink-3); font-size: 13px; }
+.msep { height: 1px; background: var(--line); margin: 5px 6px; }
+.pnote { margin: 6px 10px; font-size: 13px; color: var(--ink-3); max-width: 280px; }
+.toast { position: fixed; z-index: 90; left: 50%; bottom: 24px; transform: translate(-50%, 8px); padding: 11px 16px; border-radius: 12px; background: var(--ink); color: var(--card); font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.proto { font-size: 12.5px; color: var(--ink-3); }
+
+/* ---------- biblioteca ---------- */
+.lib-top { display: flex; align-items: center; gap: 14px; height: 76px; max-width: 1240px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 700; }
+.brand-mark { width: 34px; height: 34px; border-radius: 10px; background: var(--ink); display: grid; place-items: center; }
+.brand-mark span { width: 4px; height: 20px; background: repeating-linear-gradient(180deg, var(--yellow) 0 6px, transparent 6px 9px); border-radius: 1px; }
+.search { flex: 1; max-width: 420px; margin-left: auto; position: relative; }
+.search .i { position: absolute; left: 14px; top: 11px; color: var(--ink-3); }
+.search input { width: 100%; height: 40px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); padding: 0 16px 0 42px; }
+.lib { max-width: 1240px; margin: 0 auto; padding-bottom: 48px; }
+.resume { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 0; background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); margin-top: 4px; }
+.resume .shot { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(180deg, #6d93b3, #b9cddb 46%, #747b82 55%, #34383d); }
+.resume .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.resume .shot .prog { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(0, 0, 0, .35); }
+.resume .shot .prog i { display: block; height: 100%; background: var(--yellow); }
+.resume .txt { padding: 28px 32px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+.resume .kick { color: var(--ink-3); font-size: 14px; }
+.resume h1 { margin: 0; font-size: 40px; line-height: 1.05; font-weight: 700; }
+.resume p { margin: 0; color: var(--ink-2); font-size: 16px; max-width: 46ch; }
+.resume .acts { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.month { margin-top: 36px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.month h2 { margin: 0; font-size: 22px; font-weight: 700; }
+.cal { display: flex; gap: 4px; flex-wrap: wrap; }
+.cal span { width: 26px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 12px; color: var(--ink-3); position: relative; }
+.cal span.has { background: var(--ink); color: var(--card); font-weight: 700; }
+.cal span.has::after { content: ''; position: absolute; bottom: 3px; width: 12px; height: 3px; border-radius: 2px; background: var(--yellow); }
+.day { margin-top: 28px; }
+.dayh { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.dayh h3 { margin: 0; font-size: 26px; font-weight: 700; }
+.dayh span { color: var(--ink-2); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.card { display: flex; flex-direction: column; background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); overflow: hidden; cursor: pointer; text-align: left; padding: 0; text-decoration: none; color: inherit; }
+.card:hover { border-color: var(--ink-3); }
+.card svg.mapthumb { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; background: var(--map-land); }
+.card .body { padding: 16px 18px 18px; display: grid; gap: 8px; }
+.card .when { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.card h4 { margin: 0; font-size: 24px; font-weight: 700; }
+.card .when span { color: var(--ink-2); font-size: 14.5px; white-space: nowrap; }
+.card .nums { display: flex; gap: 18px; color: var(--ink); font-size: 15px; }
+.card .nums b { font-weight: 700; }
+.card .nums span { color: var(--ink-3); font-size: 13px; margin-left: 3px; }
+.minibar { position: relative; height: 18px; margin: 4px 0 2px; }
+.minibar::before { content: ''; position: absolute; left: 0; right: 0; top: 8px; height: 3px; border-radius: 2px; background: var(--line); }
+.minibar i { position: absolute; top: 4px; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; background: var(--card); border: 2.5px solid var(--ink-3); }
+.minibar i.max { border-color: var(--red); } .minibar i.stop { border-color: var(--blue); } .minibar i.climb, .minibar i.descent { border-color: var(--green); } .minibar i.gap { border-color: var(--gapc); }
+.minibar i.start, .minibar i.end { background: var(--ink); border-color: var(--ink); }
+.minibar u { position: absolute; top: 7px; height: 5px; border-radius: 3px; background: var(--yellow); text-decoration: none; }
+.card .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.card.empty { border-style: dashed; background: transparent; cursor: default; display: grid; place-content: center; text-align: center; padding: 28px; color: var(--ink-2); min-height: 280px; gap: 8px; }
+.card.empty .i { margin: 0 auto; width: 28px; height: 28px; color: var(--ink-3); }
+
+/* ---------- detalhe ---------- */
+.det { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; padding-bottom: 14px; }
+.dtop { display: flex; align-items: center; gap: 14px; padding-top: 12px; min-width: 0; }
+.back { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 10px; border-radius: 999px; border: 0; background: var(--card); cursor: pointer; font-weight: 700; box-shadow: var(--shadow); white-space: nowrap; }
+.dtitle { min-width: 0; }
+.dtitle h1 { margin: 0; font-size: 26px; line-height: 1.1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dtitle span { color: var(--ink-2); font-size: 14.5px; }
+.dstats { display: flex; gap: 22px; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); }
+.dstats div { display: grid; line-height: 1.15; }
+.dstats b { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.dstats span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.grow { flex: 1; }
+.dmain { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; min-height: 0; }
+.stagebox { position: relative; background: #0c0f12; border-radius: var(--r-card); overflow: hidden; container-type: size; display: grid; place-items: center; min-height: 0; }
+.screen { position: relative; width: min(100cqw, calc(100cqh * 16 / 9)); height: min(100cqh, calc(100cqw * 9 / 16)); }
+.cam { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(180deg, #6d93b3 0%, #b9cddb 44%, #747b82 54%, #34383d 100%); }
+.cam.night { background: linear-gradient(180deg, #04060a, #10141a 60%, #1d1f24); }
+.cam.inset { inset: auto 16px 16px auto; width: 30%; aspect-ratio: 16 / 9; border-radius: var(--r-media); box-shadow: 0 0 0 3px rgba(255, 255, 255, .9), 0 10px 30px rgba(0, 0, 0, .4); z-index: 2; cursor: pointer; }
+.fr { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s ease; }
+.fr.on { opacity: 1; }
+.playing .fr.on { animation: drift 7s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: scale(1); } to { transform: scale(1.045); } }
+.camname { position: absolute; z-index: 2; left: 14px; top: 14px; height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; background: rgba(12, 15, 18, .6); color: #fff; font-size: 13.5px; font-weight: 700; backdrop-filter: blur(6px); }
+.cam.inset .camname { left: 8px; top: 8px; height: 24px; font-size: 12px; padding: 0 9px; }
+.nocover { position: absolute; inset: 0; z-index: 1; display: none; place-content: center; gap: 6px; text-align: center; color: #eef2f5; font-size: 14px; padding: 10px; background: repeating-linear-gradient(135deg, rgba(22, 29, 36, .94) 0 10px, rgba(33, 41, 49, .94) 10px 20px); }
+.nocover .i { margin: 0 auto; width: 24px; height: 24px; }
+.cam.gap .nocover { display: grid; }
+.held { position: absolute; z-index: 2; right: 8px; bottom: 8px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(12, 15, 18, .7); color: #fff; display: none; }
+.unlinked .cam[data-cam=rear] .held { display: block; }
+.stagectl { position: absolute; z-index: 3; right: 14px; top: 14px; display: flex; gap: 6px; }
+.stagectl button { height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 999px; background: rgba(12, 15, 18, .6); color: #fff; cursor: pointer; font-size: 13.5px; font-weight: 700; backdrop-filter: blur(6px); }
+.stagectl button:hover { background: rgba(12, 15, 18, .8); }
+.stagectl .i { width: 17px; height: 17px; }
+.screen.split { width: min(100cqw, calc(100cqh * 32 / 9)); height: min(100cqh, calc(100cqw * 9 / 32)); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.screen.split .cam { position: relative; inset: auto; width: auto; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+.screen.split .cam.inset .camname { left: 14px; top: 14px; height: 30px; font-size: 13.5px; }
+.side { display: grid; grid-template-rows: minmax(200px, 1fr) minmax(0, 1.05fr); gap: 14px; min-height: 0; }
+.mapcard { position: relative; border-radius: var(--r-card); overflow: hidden; background: var(--map-land); border: 1px solid var(--line); }
+.mapcard > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.mapcard > svg.is-panning { cursor: grabbing; }
+.mapbtns { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+.mapbtns button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--card); box-shadow: var(--shadow); cursor: pointer; color: var(--ink-2); }
+.mapbtns button[aria-pressed=true] { color: var(--blue); }
+.mapbtns .i { width: 17px; height: 17px; }
+.coordbar { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow); font-size: 13px; }
+.coordbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapters { background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); overflow: auto; padding: 14px 10px 10px 14px; min-height: 0; }
+.chapters h2 { margin: 0 0 6px 4px; font-size: 18px; font-weight: 700; }
+.chlist { list-style: none; margin: 0; padding: 0; position: relative; }
+.chlist::before { content: ''; position: absolute; left: 21px; top: 16px; bottom: 16px; width: 3px; border-radius: 2px; background: var(--line); }
+.chlist button { position: relative; width: 100%; display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: start; padding: 7px 8px 7px 4px; border: 0; border-radius: 12px; background: none; cursor: pointer; text-align: left; }
+.chlist button:hover { background: var(--card-2); }
+.dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 2.5px solid var(--ink-3); color: var(--ink-2); position: relative; z-index: 1; }
+.dot .i { width: 16px; height: 16px; }
+li[data-type=max] .dot { border-color: var(--red); color: var(--red); }
+li[data-type=stop] .dot { border-color: var(--blue); color: var(--blue); }
+li[data-type=climb] .dot, li[data-type=descent] .dot { border-color: var(--green); color: var(--green); }
+li[data-type=gap] .dot { border-color: var(--gapc); color: var(--gapc); border-style: dashed; }
+li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.chlist b { display: block; font-family: 'Familjen Grotesk', sans-serif; font-size: 16.5px; font-weight: 600; letter-spacing: -.01em; }
+.chlist p { margin: 1px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.35; }
+.chlist time { color: var(--ink-3); font-size: 13.5px; padding-top: 2px; }
+.chlist li.now button { background: var(--yellow-soft); }
+.chlist li.now time { color: var(--ink); font-weight: 700; }
+.here { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; background: var(--yellow); color: var(--yellow-ink); font: 700 11.5px/18px 'Atkinson Hyperlegible', sans-serif; vertical-align: 2px; }
+
+/* barra da história: transporte + linha de capítulos */
+.story { background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); padding: 10px 22px 12px 74px; }
+.story .trow { margin-left: -56px; }
+.trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tc { display: flex; align-items: center; gap: 4px; }
+.tb { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.tb:hover { background: var(--card-2); }
+.tb .i { width: 23px; height: 23px; }
+.tb.play { width: 48px; height: 48px; background: var(--yellow); color: var(--yellow-ink); }
+.tb.play:hover { filter: brightness(1.05); background: var(--yellow); }
+.tb.play .i { width: 21px; height: 21px; }
+.clock { display: grid; line-height: 1.1; }
+.clock b { font-family: 'Familjen Grotesk', sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.clock span { font-size: 13px; color: var(--ink-3); white-space: nowrap; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card-2); }
+.seg button { height: 30px; min-width: 40px; padding: 0 10px; border: 0; border-radius: 999px; background: none; cursor: pointer; font-weight: 700; font-size: 13.5px; color: var(--ink-2); }
+.seg button[aria-pressed=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.now { display: flex; gap: 18px; padding-left: 14px; border-left: 1px solid var(--line); }
+.now div { display: grid; line-height: 1.15; }
+.now b { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.now span { font-size: 12.5px; color: var(--ink-3); }
+.lock { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink-2); }
+.lock[aria-pressed=false] { background: var(--yellow-soft); color: var(--ink); border-color: transparent; }
+.lock .i { width: 17px; height: 17px; }
+.selbtn[aria-expanded=true], .selbtn.has { background: var(--blue-wash); border-color: transparent; color: var(--blue); }
+.track { position: relative; margin-top: 8px; display: grid; grid-template-rows: 30px 26px 34px 20px 18px; touch-action: none; cursor: text; }
+.stations { position: relative; }
+.st { position: absolute; bottom: 0; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; white-space: nowrap; z-index: 3; }
+.st .i { width: 15px; height: 15px; color: var(--ink-3); }
+.st[data-type=max] .i { color: var(--red); } .st[data-type=stop] .i { color: var(--blue); } .st[data-type=climb] .i, .st[data-type=descent] .i { color: var(--green); } .st[data-type=gap] .i { color: var(--gapc); }
+.st:hover { border-color: var(--ink-3); }
+.st.compact .t { display: none; }
+.st.compact { padding: 0 6px; }
+.line { position: relative; }
+.line::before { content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 6px; border-radius: 3px; background: var(--line); }
+.line .done { position: absolute; left: 0; top: 10px; height: 6px; border-radius: 3px; background: var(--ink); }
+.line .rng { position: absolute; top: 9px; height: 8px; border-radius: 4px; opacity: .85; }
+.line .rng.climb, .line .rng.descent { background: var(--green); } .line .rng.stop { background: var(--blue); }
+.line .rng.gap { background: repeating-linear-gradient(135deg, var(--gapc) 0 3px, transparent 3px 6px); }
+.line .stn { position: absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--card); border: 3px solid var(--ink); }
+.spark { position: relative; }
+.spark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.spk-a { fill: var(--ink); opacity: .08; } .spk-l { fill: none; stroke: var(--ink-2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.alt-l { fill: none; stroke: var(--green); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.alt-a { fill: var(--green); opacity: .1; }
+.spark .lbl { position: absolute; right: 100%; margin-right: 8px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: var(--ink-3); pointer-events: none; white-space: nowrap; }
+.axis { position: relative; font-size: 12px; color: var(--ink-3); }
+.axis span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.sel { position: absolute; top: 30px; bottom: 18px; background: var(--blue-wash); box-shadow: inset 2px 0 0 var(--blue), inset -2px 0 0 var(--blue); pointer-events: none; z-index: 1; border-radius: 4px; }
+.sel-h { position: absolute; top: 50%; width: 16px; height: 34px; margin-top: -17px; border: 0; padding: 0; border-radius: 8px; background: var(--blue); pointer-events: auto; cursor: ew-resize; box-shadow: 0 0 0 2px var(--card); z-index: 4; }
+.sel-h.a { left: -8px; } .sel-h.b { right: -8px; }
+.sel-h::after { content: ''; position: absolute; left: 7px; top: 10px; bottom: 10px; width: 2px; border-radius: 1px; background: rgba(255, 255, 255, .75); }
+.sel-bar { position: absolute; left: 10px; right: 10px; top: 0; height: 26px; pointer-events: auto; cursor: grab; }
+.playhead { position: absolute; top: 30px; bottom: 16px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--yellow); z-index: 5; pointer-events: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); }
+.playhead::before { content: ''; position: absolute; left: -6.5px; top: 5px; width: 16px; height: 16px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 3px var(--card), 0 0 0 4px rgba(0, 0, 0, .15); }
+.hoverline { position: absolute; top: 30px; bottom: 18px; width: 1px; background: var(--ink-3); display: none; pointer-events: none; z-index: 4; }
+.hovertip { position: absolute; top: -6px; transform: translateX(-50%); padding: 4px 9px; border-radius: 8px; background: var(--ink); color: var(--card); font-size: 12.5px; white-space: nowrap; display: none; pointer-events: none; z-index: 6; }
+.selpop { width: 300px; padding: 14px; }
+.selpop h3 { margin: 0; font-size: 13px; color: var(--ink-3); font-weight: 400; }
+.selpop .rng-t { font-family: 'Familjen Grotesk', sans-serif; font-size: 24px; font-weight: 700; margin: 2px 0; }
+.selpop .rowb { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.techpanel { padding: 12px 14px; width: 360px; }
+.techpanel dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 8px 0 0; font-size: 13px; }
+.techpanel dt { color: var(--ink-3); } .techpanel dd { margin: 0; word-break: break-all; }
+.techpanel h3 { margin: 0; font-size: 15px; }
+
+@media (prefers-reduced-motion: reduce) { .playing .fr.on { animation: none; } .fr, .toast, .tip { transition: none; } }
+@media (max-width: 1100px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dstats div:nth-child(4) { display: none; } .dmain { grid-template-columns: minmax(0, 1fr) 320px; } }
+
+/* ---------- celular ---------- */
+@media (max-width: 760px) {
+  .lib-top { height: auto; flex-wrap: wrap; padding: 14px 0 6px; gap: 10px; }
+  .brand { font-size: 19px; flex: 1; }
+  .search { order: 3; max-width: none; flex-basis: 100%; margin: 0; }
+  .resume { grid-template-columns: 1fr; border-radius: 18px; }
+  .resume .txt { padding: 18px 18px 20px; }
+  .resume h1 { font-size: 30px; }
+  .cal span { width: 22px; height: 26px; font-size: 11px; }
+  .cards { grid-template-columns: 1fr; }
+  .dayh h3 { font-size: 22px; }
+  .det { height: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; }
+  .dtop { flex-wrap: wrap; gap: 8px; }
+  .dtitle { order: 4; flex-basis: 100%; }
+  .dtop .grow { order: 1; } .dtop .tipwrap { order: 2; } .dtop .themebtn { order: 2; } .dtop > div:last-child { order: 3; }
+  .tip { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; }
+  .back .lbl { display: none; } .back { padding: 0 10px; }
+  .dtitle h1 { font-size: 24px; white-space: normal; }
+  .dstats { order: 5; flex-basis: 100%; margin: 0; padding: 0; border: 0; justify-content: space-between; gap: 8px; }
+  .dstats div:nth-child(4) { display: grid; }
+  .dstats b { font-size: 17px; }
+  .dtop .pill .lbl { display: none; } .dtop .pill { padding: 0 9px; }
+  .dmain { display: contents; }
+  .stagebox { order: 2; aspect-ratio: 16 / 9; width: 100%; height: auto; border-radius: 14px; }
+  .story { order: 3; padding: 10px 14px 12px 58px; }
+  .story .trow { margin-left: -46px; }
+  .side { order: 4; display: flex; flex-direction: column; gap: 12px; }
+  .mapcard { height: 260px; }
+  .chapters { overflow: visible; }
+  .stagectl { right: 8px; top: 8px; } .stagectl button .lbl { display: none; } .stagectl button { padding: 0 9px; height: 30px; }
+  .camname { left: 8px; top: 8px; height: 24px; font-size: 12px; padding: 0 9px; }
+  .cam.inset { inset: auto 8px 8px auto; width: 34%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9); }
+  .cam.inset .camname { display: none; }
+  .trow { gap: 10px; }
+  .now { order: 6; flex-basis: 100%; border: 0; padding: 0; justify-content: space-between; }
+  .clock b { font-size: 22px; }
+  .st .t { display: none; } .st { padding: 0 6px; }
+  .pop { right: auto; left: 0; } .selpop, .techpanel { width: calc(100vw - 56px); }
+}
+</style>
+</head>
+<body>
+<!-- ===== Tela 1: biblioteca ===== -->
+<div id="viewLib" class="wrap">
+  <header class="lib-top">
+    <div class="brand disp"><span class="brand-mark" aria-hidden="true"><span></span></span>Diário de viagens</div>
+    <label class="search"><svg class="i"><use href="#i-search"/></svg><span class="sr">Buscar viagem</span><input id="q" type="search" placeholder="Buscar dia, horário ou período" autocomplete="off"></label>
+    <button class="icon themebtn" title="Alternar tema claro/escuro"><svg class="i"><use href="#i-moon"/></svg><span class="sr">Alternar tema</span></button>
+  </header>
+  <main class="lib">
+    <section class="resume" aria-label="Continuar assistindo">
+      <div class="shot"><img src="frames/day-front-1.jpg" alt="Quadro da câmera dianteira onde você parou" onerror="this.remove()"><div class="prog"><i id="resumeProg" style="width:35%"></i></div></div>
+      <div class="txt">
+        <span class="kick">Continuar de onde você parou</span>
+        <h1 class="disp" id="resumeTitle">Sábado de manhã</h1>
+        <p id="resumeText"></p>
+        <div class="acts">
+          <a class="btn primary" href="#detalhe" id="resumeGo"><svg class="i"><use href="#i-play"/></svg>Continuar</a>
+          <a class="btn" href="#detalhe">Ver capítulos</a>
+        </div>
+      </div>
+    </section>
+    <div class="month">
+      <h2 class="disp">Novembro de 2026</h2>
+      <div class="cal" id="cal" aria-label="Dias com viagens em novembro"></div>
+    </div>
+    <div id="days"></div>
+    <p class="proto" style="margin-top:28px">Protótipo — dados de exemplo da viagem de 21/11. Mapas e quadros ilustrativos.</p>
+  </main>
+</div>
+
+<!-- ===== Tela 2: detalhe ===== -->
+<div id="viewDet" class="wrap det" hidden>
+  <header class="dtop">
+    <a class="back" href="#biblioteca"><svg class="i"><use href="#i-back"/></svg><span class="lbl">Viagens</span></a>
+    <div class="dtitle"><h1 class="disp" id="dTitle">Sábado de manhã</h1><span id="dSub"></span></div>
+    <div class="dstats" id="dStats"></div>
+    <div class="grow"></div>
+    <div class="tipwrap">
+      <button class="pill" id="syncPill" aria-describedby="syncTip"><svg class="i"><use href="#i-check"/></svg><span class="lbl">Vídeo e GPS alinhados</span></button>
+      <div class="tip" role="tooltip" id="syncTip"></div>
+    </div>
+    <button class="icon themebtn" title="Alternar tema claro/escuro"><svg class="i"><use href="#i-moon"/></svg><span class="sr">Alternar tema</span></button>
+    <div style="position:relative">
+      <button class="icon" id="moreBtn" aria-haspopup="menu" aria-controls="morePop" title="Mais ações"><svg class="i"><use href="#i-more"/></svg><span class="sr">Mais ações</span></button>
+      <div class="pop" id="morePop" role="menu" aria-label="Mais ações">
+        <button class="mi" role="menuitem" data-act="copy" data-close><svg class="i"><use href="#i-copy"/></svg>Copiar coordenada deste ponto</button>
+        <div class="msep" role="separator"></div>
+        <button class="mi" role="menuitem" data-act="gpx" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>GPX</small></button>
+        <button class="mi" role="menuitem" data-act="kml" data-close><svg class="i"><use href="#i-download"/></svg>Exportar viagem inteira<small>KML</small></button>
+        <div class="msep" role="separator"></div>
+        <button class="mi" role="menuitem" data-act="tech"><svg class="i"><use href="#i-info"/></svg>Detalhes técnicos</button>
+        <button class="mi" role="menuitem" data-act="keys"><svg class="i"><use href="#i-keyboard"/></svg>Atalhos de teclado</button>
+        <div id="techBox" class="techpanel" hidden></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dmain">
+    <section class="stagebox" aria-label="Vídeos das câmeras">
+      <div class="screen" id="screen">
+        <div class="cam" data-cam="front" id="camFront">
+          <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+          <span class="camname">Câmera dianteira</span>
+          <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação dianteira neste trecho</div>
+        </div>
+        <div class="cam inset" data-cam="rear" id="camRear" role="button" tabindex="0" aria-label="Câmera traseira. Toque para ver em tamanho grande">
+          <img class="fr on" alt="" data-src=""><img class="fr" alt="" data-src="">
+          <span class="camname">Câmera traseira</span>
+          <div class="nocover"><svg class="i"><use href="#i-nofilm"/></svg>Sem gravação traseira neste trecho</div>
+          <span class="held" id="held"></span>
+        </div>
+      </div>
+      <div class="stagectl">
+        <button id="splitBtn" aria-pressed="false" title="Ver frente e trás lado a lado"><svg class="i"><use href="#i-split"/></svg><span class="lbl">Lado a lado</span></button>
+        <button id="swapBtn" title="Trocar câmera principal"><svg class="i"><use href="#i-swap"/></svg><span class="lbl">Trocar</span></button>
+      </div>
+    </section>
+
+    <div class="side">
+      <section class="mapcard" aria-label="Mapa">
+        <svg id="map" role="img" aria-label="Mapa da viagem. Toque num ponto para ir até ele." preserveAspectRatio="none"></svg>
+        <div class="mapbtns">
+          <button id="follow" aria-pressed="false" title="Seguir o carro"><svg class="i"><use href="#i-target"/></svg><span class="sr">Seguir o carro</span></button>
+          <button id="fit" title="Ver a rota inteira"><svg class="i"><use href="#i-route"/></svg><span class="sr">Ver a rota inteira</span></button>
+        </div>
+        <div class="coordbar" id="coordBar" hidden role="status"><svg class="i"><use href="#i-pin"/></svg><span id="coordTxt"></span><button class="btn s" id="coordCopy"><svg class="i"><use href="#i-copy"/></svg>Copiar</button></div>
+      </section>
+      <section class="chapters" aria-label="Capítulos da viagem">
+        <h2 class="disp">Capítulos</h2>
+        <ol class="chlist" id="chlist"></ol>
+      </section>
+    </div>
+  </div>
+
+  <section class="story" aria-label="Reprodução e linha do tempo">
+    <div class="trow">
+      <div class="tc">
+        <button class="tb" id="back" title="Voltar 10 s (←)"><svg class="i"><use href="#i-back10"/></svg><span class="sr">Voltar 10 segundos</span></button>
+        <button class="tb play" id="play" title="Reproduzir (espaço)"><svg class="i" id="playIco"><use href="#i-play"/></svg><span class="sr" id="playLbl">Reproduzir</span></button>
+        <button class="tb" id="fwd" title="Avançar 10 s (→)"><svg class="i"><use href="#i-fwd10"/></svg><span class="sr">Avançar 10 segundos</span></button>
+      </div>
+      <div class="clock"><b id="clock">10:03:02</b><span id="elapsed"></span></div>
+      <div class="seg" role="group" aria-label="Velocidade de reprodução"><button data-rate="1" aria-pressed="true">1×</button><button data-rate="2" aria-pressed="false">2×</button><button data-rate="4" aria-pressed="false">4×</button></div>
+      <div class="now"><div><b id="nSpd">57 km/h</b><span>velocidade</span></div><div><b id="nAlt">171 m</b><span>altitude</span></div><div><b id="nKm">52,1 km</b><span id="nKmOf">percorridos</span></div></div>
+      <div class="grow"></div>
+      <div class="tipwrap">
+        <button class="lock" id="lockBtn" aria-pressed="true" aria-describedby="lockTip"><svg class="i"><use href="#i-lock"/></svg><span class="sr" id="lockLbl">Câmeras juntas</span></button>
+        <div class="tip" role="tooltip" id="lockTip" style="top:auto;bottom:calc(100% + 10px)"></div>
+      </div>
+      <div style="position:relative">
+        <button class="btn s selbtn" id="selBtn" aria-haspopup="dialog" aria-controls="selPop"><svg class="i"><use href="#i-download"/></svg><span id="selBtnTxt">Trecho</span></button>
+        <div class="pop up selpop" id="selPop" role="dialog" aria-label="Trecho selecionado"></div>
+      </div>
+    </div>
+    <div class="track" id="track" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="100" aria-valuenow="35">
+      <div class="stations" id="stations"></div>
+      <div class="line" id="line"></div>
+      <div class="spark"><svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true"><path class="spk-a" id="spkA"/><path class="spk-l" id="spkL"/></svg><span class="lbl">km/h</span></div>
+      <div class="spark"><svg viewBox="0 0 1000 18" preserveAspectRatio="none" aria-hidden="true"><path class="alt-a" id="altA"/><path class="alt-l" id="altL"/></svg><span class="lbl">altitude</span></div>
+      <div class="axis" id="axis"></div>
+      <div class="sel" id="sel" hidden><div class="sel-bar" id="selBar" title="Arraste para mover o trecho"></div><button class="sel-h a" id="selA" aria-label="Início do trecho"></button><button class="sel-h b" id="selB" aria-label="Fim do trecho"></button></div>
+      <div class="playhead" id="playhead"></div>
+      <div class="hoverline" id="hoverLine"></div>
+      <div class="hovertip" id="hoverTip"></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="mock-data.js"></script>
+<script src="proto-core.js"></script>
+<style>
+.c-land { fill: var(--map-land); } .c-water { fill: var(--map-water); } .c-park { fill: var(--map-park); }
+.c-river { fill: none; stroke: var(--map-water); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.c-cas { fill: none; stroke: var(--map-cas); stroke-width: 3.4; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.c-road { fill: none; stroke: var(--map-road); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.c-major { fill: none; stroke: var(--map-road); stroke-width: 4; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.c-mcas { fill: none; stroke: var(--map-cas); stroke-width: 6.5; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.c-rcas { fill: none; stroke: var(--card); stroke-width: 9; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.c-route { fill: none; stroke: var(--ink-3); stroke-width: 4.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.c-done { fill: none; stroke: var(--ink); stroke-width: 4.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.c-sel { fill: none; stroke: var(--blue); stroke-opacity: .45; stroke-width: 15; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+<script>
+(function () {
+  'use strict';
+  const P = window.Proto; P.injectIcons();
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement, player = P.player(), svg = $('map');
+  let rearHold = null, lastIdx = -1, lastMark = '', swapped = false, coordF = null;
+
+  /* ---------- tema ---------- */
+  const darkNow = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const syncThemeIcons = () => document.querySelectorAll('.themebtn use').forEach((u) => u.setAttribute('href', darkNow() ? '#i-sun' : '#i-moon'));
+  try { const m = localStorage.getItem('estudio-c-theme'); if (m) root.dataset.theme = m; } catch (e) {}
+  document.querySelectorAll('.themebtn').forEach((b) => b.addEventListener('click', () => {
+    root.dataset.theme = darkNow() ? 'light' : 'dark';
+    try { localStorage.setItem('estudio-c-theme', root.dataset.theme); } catch (e) {}
+    syncThemeIcons();
+  }));
+  syncThemeIcons();
+
+  /* ---------- textos dos capítulos ---------- */
+  function chapterText(m, t) {
+    const mins = m.to !== undefined ? Math.max(1, Math.round((m.to - m.f) * t.elapsed_s / 60)) : 0;
+    switch (m.type) {
+      case 'start': return {title: 'Partida', text: 'Início da gravação das duas câmeras.'};
+      case 'end': return {title: 'Chegada', text: `${P.num(t.distance_km, 0)} km em ${P.dur(t.duration_min)}.`};
+      case 'climb': case 'descent': return {title: m.label, text: `De ${P.num(P.val(t.altitude, m.f), 0)} m a ${P.num(P.val(t.altitude, m.to), 0)} m de altitude em ${mins} min.`};
+      case 'stop': return {title: m.label, text: 'Carro parado; as câmeras continuaram gravando.'};
+      case 'max': return {title: m.label, text: 'O momento mais rápido da viagem.'};
+      case 'gap': return {title: m.label, text: `A câmera traseira não gravou por ${mins} min. O GPS e a câmera dianteira continuam.`};
+    }
+    return {title: m.label, text: ''};
+  }
+  const stationShort = (m, t) => ({stop: `Parada ${P.num(Math.round(m.minutes))} min`, max: `${P.num(Math.round(t.max_speed))} km/h`, climb: 'Subida', descent: 'Descida', gap: 'Sem vídeo', start: 'Partida', end: 'Chegada'}[m.type]);
+
+  /* ---------- biblioteca ---------- */
+  function thumbSvg(t) {
+    const W = 400, H = 200, th = P.renderThumb(t, W, H, 26), bb = t.bbox, k = Math.min((W - 52) / Math.max(bb.w, 1), (H - 52) / Math.max(bb.h, 1));
+    const at = (f) => { const p = P.pos(t, f); return [W / 2 + (p.x - bb.cx) * k, H / 2 + (p.y - bb.cy) * k]; };
+    const dots = t.marks.filter((m) => m.type === 'stop' || m.type === 'max').map((m) => { const [x, y] = at(m.f); return `<circle cx="${x}" cy="${y}" r="5" fill="var(--card)" stroke="${m.type === 'max' ? 'var(--red)' : 'var(--blue)'}" stroke-width="3"/>`; }).join('');
+    const water = Math.hypot(t.route[0][0] - t.route[t.route.length - 1][0], t.route[0][1] - t.route[t.route.length - 1][1]) > 30
+      ? `<path class="c-water" d="M${W - 18} 0 Q${W - 34} 60 ${W - 14} 110 T${W - 8} ${H} L${W} ${H} L${W} 0Z"/>` : `<ellipse class="c-water" cx="${W * .5}" cy="${H * .5}" rx="34" ry="20"/>`;
+    return `<svg class="mapthumb" viewBox="0 0 ${W} ${H}" aria-hidden="true">${water}
+      <path d="${th.d}" fill="none" stroke="var(--card)" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${th.d}" fill="none" stroke="var(--ink)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}
+      <circle cx="${th.a[0]}" cy="${th.a[1]}" r="6" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><circle cx="${th.b[0]}" cy="${th.b[1]}" r="7" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/></svg>`;
+  }
+  function renderLibrary() {
+    const t0 = P.trips[0], f = player.s.trip.index === 0 ? player.s.f : 0.35;
+    const next = t0.marks.find((m) => m.f > f + 1e-4);
+    $('resumeTitle').textContent = t0.title;
+    $('resumeProg').style.width = (f * 100) + '%';
+    $('resumeText').textContent = `Você parou às ${P.clock(t0, f, false)}.` + (next ? ` Próximo capítulo: ${next.label.charAt(0).toLowerCase() + next.label.slice(1)}, às ${P.clock(t0, next.f, false)}.` : '');
+    const days = new Set(P.trips.map((t) => +t.date.slice(8, 10)));
+    $('cal').innerHTML = Array.from({length: 30}, (_, i) => `<span class="${days.has(i + 1) ? 'has' : ''}"${days.has(i + 1) ? ` title="${P.trips.filter((t) => +t.date.slice(8, 10) === i + 1).length} viagens"` : ''}>${i + 1}</span>`).join('');
+    const q = $('q').value.trim().toLowerCase(), byDay = {};
+    P.trips.filter((t) => !q || `${t.dayLong} ${t.dayShort} ${t.period} ${P.clock(t, 0, false)} ${P.clock(t, 1, false)}`.toLowerCase().includes(q)).forEach((t) => (byDay[t.dayLong] = byDay[t.dayLong] || []).push(t));
+    const entries = Object.entries(byDay);
+    $('days').innerHTML = entries.length ? entries.map(([day, list]) => {
+      const km = list.reduce((a, t) => a + t.distance_km, 0), min = list.reduce((a, t) => a + t.duration_min, 0);
+      return `<section class="day"><div class="dayh"><h3 class="disp">${P.cap(day)}</h3><span>${list.length} viage${list.length > 1 ? 'ns' : 'm'}, ${P.num(km, 0)} km e ${P.dur(min)} ao volante</span></div><div class="cards">` +
+        list.map((t) => {
+          const sy = P.syncText(t), stopN = t.marks.filter((m) => m.type === 'stop').length;
+          const ranges = t.marks.filter((m) => m.to !== undefined && m.type !== 'gap').map((m) => `<u style="left:${m.f * 100}%;width:${Math.max(.8, (m.to - m.f) * 100)}%"></u>`).join('');
+          const pts = t.marks.map((m) => `<i class="${m.type}" style="left:${m.f * 100}%" title="${m.label}"></i>`).join('');
+          return `<a class="card" href="#viagem-${t.id}">${thumbSvg(t)}<div class="body">
+            <div class="when"><h4 class="disp">${P.cap(t.period)}</h4><span>${P.clock(t, 0, false)} às ${P.clock(t, 1, false)}</span></div>
+            <div class="nums"><div><b>${P.num(t.distance_km, 0)}</b><span>km</span></div><div><b>${P.dur(t.duration_min)}</b></div><div><b>${P.num(Math.round(t.max_speed))}</b><span>km/h máx.</span></div></div>
+            <div class="minibar" aria-hidden="true">${ranges}${pts}</div>
+            <div class="badges">${t.night ? `<span class="badge">${P.icon('moon')}Noite</span>` : ''}${stopN ? `<span class="badge">${P.icon('stop')}${stopN} parada${stopN > 1 ? 's' : ''}</span>` : ''}${sy.state === 'warn' ? `<span class="badge warn">${P.icon('warn')}${sy.label}</span>` : ''}</div>
+          </div></a>`;
+        }).join('') + `<div class="card empty">${P.icon('calendar')}<b>Próximas viagens</b><span>Depois de importar o cartão da câmera, as novas viagens aparecem aqui, agrupadas por dia.</span></div></div></section>`;
+    }).join('') : `<p style="margin-top:28px">Nenhuma viagem encontrada para “${q.replace(/[<>&]/g, '')}”. Tente um dia (21/11), um horário (09:03) ou “noite”.</p>`;
+  }
+  $('q').addEventListener('input', renderLibrary);
+
+  /* ---------- navegação biblioteca ↔ detalhe ---------- */
+  let mv = null;
+  function route() {
+    const h = location.hash;
+    const m = /^#viagem-(\d+)/.exec(h), det = h === '#detalhe' || !!m;
+    $('viewLib').hidden = det; $('viewDet').hidden = !det;
+    if (!det) { player.pause(); renderLibrary(); document.title = 'Diário de viagens'; return; }
+    if (m) { const i = P.trips.findIndex((t) => t.id === m[1]); if (i >= 0 && i !== player.s.trip.index) player.setTrip(i, 0); }
+    document.title = `${player.s.trip.title} — Diário de viagens`;
+    if (!mv) initDetail(); else { requestAnimationFrame(() => { mv.fit(); layoutTrack(player.s.trip); renderTime(player.s); }); }
+    window.scrollTo(0, 0);
+  }
+  addEventListener('hashchange', route);
+
+  /* ---------- detalhe ---------- */
+  function buildMap(t) {
+    const S = P.scenery(t);
+    svg.innerHTML = `<rect class="c-land" x="-6000" y="-6000" width="13000" height="13000"/>
+      ${S.parks.map((d) => `<path class="c-park" d="${d}"/>`).join('')}${S.water.map((d) => `<path class="c-water" d="${d}"/>`).join('')}${S.land.map((d) => `<path class="c-land" d="${d}"/>`).join('')}
+      ${S.waterLines.map((d) => `<path class="c-river" d="${d}"/>`).join('')}
+      ${S.minor.map((d) => `<path class="c-cas" d="${d}"/>`).join('')}${S.minor.map((d) => `<path class="c-road" d="${d}"/>`).join('')}
+      ${S.major.concat(S.bridges).map((d) => `<path class="c-mcas" d="${d}"/>`).join('')}${S.major.concat(S.bridges).map((d) => `<path class="c-major" d="${d}"/>`).join('')}
+      <path class="c-sel" id="mSel"/><path class="c-rcas" d="${P.line(t.route)}"/><path class="c-route" d="${P.line(t.route)}"/><path class="c-done" id="mDone"/>
+      <g id="mMarks"></g>
+      <g id="mCar"><circle r="15" fill="var(--yellow)" opacity=".3"/><circle r="8.5" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/></g>`;
+    const a = t.route[0], z = t.route[t.route.length - 1];
+    $('mMarks').innerHTML = `<g class="mk" data-x="${a[0]}" data-y="${a[1]}"><circle r="7" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/></g><g class="mk" data-x="${z[0]}" data-y="${z[1]}"><circle r="8" fill="var(--ink)"/><circle r="3" fill="var(--card)"/></g>` +
+      t.marks.filter((m) => m.type === 'stop' || m.type === 'max').map((m) => { const p = P.pos(t, m.f), c = m.type === 'max' ? 'var(--red)' : 'var(--blue)';
+        return `<g class="mk" data-x="${p.x}" data-y="${p.y}"><circle r="6" fill="var(--card)" stroke="${c}" stroke-width="3.5"/></g>`; }).join('');
+    lastIdx = -1;
+  }
+  function placeMarks() {
+    const k = mv.unitsPerPx();
+    svg.querySelectorAll('.mk').forEach((g) => g.setAttribute('transform', `translate(${g.dataset.x} ${g.dataset.y}) scale(${k})`));
+    const p = P.pos(player.s.trip, player.s.f); $('mCar').setAttribute('transform', `translate(${p.x} ${p.y}) scale(${k})`);
+  }
+  function layoutTrack(t) {
+    const tr = $('track'), w = tr.clientWidth || 800, step = ([10, 15, 30, 60, 120].find((m) => w / (t.elapsed_s / (m * 60)) >= 70) || 120) * 60;
+    let h = ''; for (let s = Math.ceil(t.start / step) * step; s <= t.end; s += step) { const l = (s - t.start) / t.elapsed_s * 100; if (l > 3 && l < 97) h += `<span style="left:${l}%">${P.clockOf(s, false)}</span>`; }
+    $('axis').innerHTML = h;
+    P.declutter($('stations'));
+  }
+  function renderStatic(t) {
+    $('dTitle').textContent = t.title;
+    $('dSub').textContent = `${P.cap(t.dayLong)}, ${P.clock(t, 0, false)} às ${P.clock(t, 1, false)}`;
+    $('dStats').innerHTML = [[`${P.num(t.distance_km, 1)} km`, 'distância'], [P.dur(t.duration_min), 'duração'], [`${P.num(Math.round(t.max_speed))} km/h`, 'máxima'], [`${P.num(Math.round(t.avg_speed))} km/h`, 'média']].map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+    const sy = P.syncText(t);
+    $('syncPill').dataset.state = sy.state; $('syncPill').querySelector('.lbl').textContent = sy.label;
+    $('syncPill').querySelector('use').setAttribute('href', sy.state === 'ok' ? '#i-check' : '#i-warn'); $('syncTip').textContent = sy.tip;
+    $('chlist').innerHTML = t.marks.map((m, i) => { const c = chapterText(m, t); return `<li data-type="${m.type}" data-i="${i}"><button data-f="${m.f}"><span class="dot">${P.icon(P.markIcon[m.type])}</span><span><b>${c.title}</b><p>${c.text}</p></span><time>${P.clock(t, m.f, false)}</time></button></li>`; }).join('');
+    $('chlist').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => player.seek(+b.dataset.f)));
+    $('stations').innerHTML = t.marks.filter((m) => m.type !== 'start' && m.type !== 'end').map((m) => `<button class="st" data-type="${m.type}" data-f="${m.f}" style="left:${m.f * 100}%;${m.f < .05 ? 'transform:translateX(-8%);' : m.f > .95 ? 'transform:translateX(-92%);' : ''}" title="${m.label}, às ${P.clock(t, m.f, false)}">${P.icon(P.markIcon[m.type])}<span class="t">${stationShort(m, t)}</span><span class="sr">${m.label}</span></button>`).join('');
+    $('stations').querySelectorAll('.st').forEach((b) => b.addEventListener('click', () => player.seek(+b.dataset.f)));
+    $('line').innerHTML = `<div class="done" id="lineDone"></div>` + t.marks.filter((m) => m.to !== undefined).map((m) => `<div class="rng ${m.type}" style="left:${m.f * 100}%;width:${Math.max(.6, (m.to - m.f) * 100)}%"></div>`).join('') +
+      t.marks.filter((m) => m.to === undefined).map((m) => `<span class="stn" style="left:${m.f * 100}%"></span>`).join('');
+    const sp = P.seriesPath(t.speed, 1000, 34, 0, Math.max(140, t.max_speed), 2);
+    $('spkA').setAttribute('d', sp.area); $('spkL').setAttribute('d', sp.line);
+    const lo = Math.min(...t.altitude), hi = Math.max(...t.altitude), ap = P.seriesPath(t.altitude, 1000, 18, lo, hi, 2);
+    $('altA').setAttribute('d', ap.area); $('altL').setAttribute('d', ap.line);
+    $('camFront').classList.toggle('night', t.night); $('camRear').classList.toggle('night', t.night);
+    $('nKmOf').textContent = `de ${P.num(t.distance_km, 1)} km`;
+    $('coordBar').hidden = true; coordF = null;
+    buildMap(t); mv.setTrip(t); placeMarks(); layoutTrack(t);
+    document.title = `${t.title} — Diário de viagens`;
+  }
+  function renderSel(s) {
+    const t = s.trip, sel = s.sel, pop = $('selPop');
+    $('sel').hidden = !sel; $('selBtn').classList.toggle('has', !!sel);
+    if (!sel) {
+      $('selBtnTxt').textContent = 'Selecionar trecho'; $('mSel').setAttribute('d', '');
+      pop.innerHTML = `<h3>Trecho</h3><p class="pnote" style="margin:6px 0">Escolha um trecho para rever ou exportar. Depois, ajuste arrastando as alças azuis na linha do tempo (ou use I e O).</p><div class="rowb"><button class="btn s primary" id="selNew">${P.icon('markIn')}Começar trecho aqui</button></div>`;
+      $('selNew').addEventListener('click', () => player.setSel({a: s.f, b: Math.min(1, s.f + 0.06)}));
+      return;
+    }
+    const info = P.selInfo(t, sel);
+    $('sel').style.left = sel.a * 100 + '%'; $('sel').style.width = (sel.b - sel.a) * 100 + '%';
+    $('selA').setAttribute('aria-valuetext', info.from); $('selB').setAttribute('aria-valuetext', info.to);
+    $('selBtnTxt').textContent = `Trecho ${info.from}–${info.to}`;
+    $('mSel').setAttribute('d', P.line(P.routeSlice(t, sel.a, sel.b)));
+    pop.innerHTML = `<h3>Trecho selecionado</h3><div class="rng-t">${info.from} às ${info.to}</div><div style="color:var(--ink-2)">${P.dur(info.min)} e ${P.num(info.km, 1)} km</div>
+      <div class="rowb"><button class="btn s primary" data-fmt="gpx">${P.icon('download')}Exportar GPX</button><button class="btn s" data-fmt="kml">${P.icon('download')}KML</button>
+      <button class="btn s" id="selPlay">${P.icon('play')}Ver do início</button><button class="btn s" id="selClear">${P.icon('x')}Limpar</button></div>
+      <p class="pnote" style="margin:10px 0 0">Exporta só o traçado do trecho. Em outro aplicativo, a rota pode não seguir exatamente as mesmas ruas.</p>`;
+    pop.querySelectorAll('[data-fmt]').forEach((b) => b.addEventListener('click', () => P.toast($('toast'), `Trecho exportado: ${P.exportName(t, sel, b.dataset.fmt)}`)));
+    $('selPlay').addEventListener('click', () => { player.seek(sel.a); player.play(); });
+    $('selClear').addEventListener('click', () => player.setSel(null));
+  }
+  function moveSel(s) {
+    if (!s.sel || $('sel').hidden || !$('selPop').querySelector('.rng-t')) return renderSel(s);
+    const info = P.selInfo(s.trip, s.sel);
+    $('sel').style.left = s.sel.a * 100 + '%'; $('sel').style.width = (s.sel.b - s.sel.a) * 100 + '%';
+    $('selBtnTxt').textContent = `Trecho ${info.from}–${info.to}`;
+    $('selPop').querySelector('.rng-t').textContent = `${info.from} às ${info.to}`;
+    $('mSel').setAttribute('d', P.line(P.routeSlice(s.trip, s.sel.a, s.sel.b)));
+  }
+  function renderState(s) {
+    $('playIco').querySelector('use').setAttribute('href', s.playing ? '#i-pause' : '#i-play');
+    $('playLbl').textContent = s.playing ? 'Pausar' : 'Reproduzir'; $('play').title = s.playing ? 'Pausar (espaço)' : 'Reproduzir (espaço)';
+    $('viewDet').classList.toggle('playing', s.playing); $('viewDet').classList.toggle('unlinked', !s.linked);
+    document.querySelectorAll('[data-rate]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.rate === s.rate));
+    $('lockBtn').setAttribute('aria-pressed', s.linked); $('lockBtn').querySelector('use').setAttribute('href', s.linked ? '#i-lock' : '#i-unlock');
+    $('lockLbl').textContent = s.linked ? 'Câmeras juntas' : 'Câmeras separadas';
+    $('lockTip').textContent = s.linked ? 'Câmeras juntas: reproduzir, pausar e pular valem para frente e trás. Toque para deixar a traseira parada e comparar com outro momento.' : 'Câmeras separadas: a traseira ficou parada no momento escolhido. Toque para juntar de novo.';
+  }
+  function renderTime(s) {
+    if ($('viewDet').hidden) return;
+    const t = s.trip, f = s.f, rf = s.linked || rearHold === null ? f : rearHold, clk = P.clock(t, f);
+    $('clock').textContent = clk; $('elapsed').textContent = `${P.hms(f * t.elapsed_s)} de ${P.hms(t.elapsed_s)}`;
+    $('nSpd').textContent = `${P.num(P.val(t.speed, f), 0)} km/h`; $('nAlt').textContent = `${P.num(P.val(t.altitude, f), 0)} m`; $('nKm').textContent = `${P.num(P.kmAt(t, f), 1)} km`;
+    $('playhead').style.left = f * 100 + '%'; $('lineDone').style.width = f * 100 + '%';
+    $('track').setAttribute('aria-valuenow', Math.round(f * 100)); $('track').setAttribute('aria-valuetext', clk);
+    P.frameSwap($('camFront'), P.frameAt(t, f).front); P.frameSwap($('camRear'), P.frameAt(t, rf).rear);
+    $('camFront').classList.toggle('gap', !!P.inGap(t, 'front', f)); $('camRear').classList.toggle('gap', !!P.inGap(t, 'rear', rf));
+    $('held').textContent = `Parada em ${P.clock(t, rf)}`;
+    const p = P.pos(t, f);
+    if (mv.following) mv.center(p.x, p.y); else $('mCar').setAttribute('transform', `translate(${p.x} ${p.y}) scale(${mv.unitsPerPx()})`);
+    const idx = Math.floor(f * (t.route.length - 1));
+    if (idx !== lastIdx) { lastIdx = idx; $('mDone').setAttribute('d', P.line(P.routeSlice(t, 0, f))); }
+    let cur = -1; t.marks.forEach((m, i) => { if (m.f <= f + 1e-4) cur = i; });
+    if (t.id + cur !== lastMark) {
+      lastMark = t.id + cur;
+      $('chlist').querySelectorAll('li').forEach((li) => { const on = +li.dataset.i === cur; li.classList.toggle('now', on); const b = li.querySelector('b'); const tag = b.querySelector('.here'); if (on && !tag) b.insertAdjacentHTML('beforeend', '<span class="here">agora</span>'); if (!on && tag) tag.remove(); });
+    }
+  }
+  function swap() {
+    swapped = !swapped;
+    const main = swapped ? $('camRear') : $('camFront'), small = swapped ? $('camFront') : $('camRear');
+    main.classList.remove('inset'); main.removeAttribute('role'); main.removeAttribute('tabindex'); main.removeAttribute('aria-label');
+    small.classList.add('inset'); small.setAttribute('role', 'button'); small.setAttribute('tabindex', '0');
+    small.setAttribute('aria-label', (small === $('camRear') ? 'Câmera traseira' : 'Câmera dianteira') + '. Toque para ver em tamanho grande');
+    $('screen').insertBefore(main, $('screen').firstChild);
+  }
+  function initDetail() {
+    mv = P.mapView(svg, player.s.trip, () => ({l: 24, r: 24, t: 56, b: 24}));
+    mv.onchange = placeMarks;
+    mv.interactive((x, y) => {
+      const t = player.s.trip, hit = P.nearest(t, x, y); player.seek(hit.f); coordF = hit.f;
+      $('coordTxt').textContent = P.coord(t, hit.f).text; $('coordBar').hidden = false;
+    });
+    $('coordCopy').addEventListener('click', () => copyCoord($('coordTxt').textContent));
+    $('follow').addEventListener('click', () => { const v = !mv.following; mv.follow(v); $('follow').setAttribute('aria-pressed', v); if (v) { mv.zoom(2.5); renderTime(player.s); } });
+    $('fit').addEventListener('click', () => { mv.follow(false); $('follow').setAttribute('aria-pressed', 'false'); mv.fit(); });
+    $('swapBtn').addEventListener('click', swap);
+    $('splitBtn').addEventListener('click', () => { const on = !$('screen').classList.contains('split'); $('screen').classList.toggle('split', on); $('splitBtn').setAttribute('aria-pressed', on); });
+    [$('camFront'), $('camRear')].forEach((c) => {
+      c.addEventListener('click', () => { if (c.classList.contains('inset') && !$('screen').classList.contains('split')) swap(); });
+      c.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && c.classList.contains('inset')) { e.preventDefault(); e.stopPropagation(); swap(); } });
+    });
+    $('play').addEventListener('click', () => player.toggle());
+    $('back').addEventListener('click', () => player.nudge(-10));
+    $('fwd').addEventListener('click', () => player.nudge(10));
+    document.querySelectorAll('[data-rate]').forEach((b) => b.addEventListener('click', () => player.setRate(+b.dataset.rate)));
+    $('lockBtn').addEventListener('click', () => { const v = !player.s.linked; rearHold = v ? null : player.s.f; player.setLinked(v); });
+    P.popover($('selBtn'), $('selPop'));
+    P.popover($('moreBtn'), $('morePop'), () => { $('techBox').hidden = true; });
+    $('morePop').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const t = player.s.trip, a = b.dataset.act;
+      if (a === 'copy') copyCoord(P.coord(t, player.s.f).text);
+      if (a === 'gpx' || a === 'kml') P.toast($('toast'), `Exportado ${P.exportName(t, null, a)} (só o traçado)`);
+      if (a === 'tech') { $('techBox').hidden = false; $('techBox').innerHTML = `<h3>Detalhes técnicos</h3><dl><dt>Vídeo dianteiro</dt><dd>${t.files.front}</dd><dt>Vídeo traseiro</dt><dd>${t.files.rear}</dd><dt>Duração do vídeo</dt><dd>${P.hms(t.video_duration_s)} de ${P.hms(t.elapsed_s)} de GPS (${P.num(t.video_duration_s / t.elapsed_s * 100, 0)}%)</dd><dt>Pontos GPS</dt><dd>${P.num(t.gpsPoints)} registros</dd><dt>Sincronização</dt><dd>${t.sync.status}, confiança ${t.sync.confidence === 'high' ? 'alta' : t.sync.confidence}</dd><dt>Importação</dt><dd>153 arquivos traseiros e 153 dianteiros unidos</dd></dl>`; }
+      if (a === 'keys') { $('techBox').hidden = false; $('techBox').innerHTML = `<h3>Atalhos de teclado</h3><dl><dt>Espaço</dt><dd>Reproduzir ou pausar</dd><dt>← →</dt><dd>Voltar ou avançar 10 s (Shift: 1 min)</dd><dt>I e O</dt><dd>Início e fim do trecho</dd><dt>C</dt><dd>Trocar câmera principal</dd><dt>Esc</dt><dd>Fechar menus</dd></dl>`; }
+    });
+    const tr = $('track');
+    P.scrub(tr, player, '.sel-h, .sel-bar, .st');
+    P.dragSel($('selA'), tr, player, 'a'); P.dragSel($('selB'), tr, player, 'b'); P.dragSel($('selBar'), tr, player, 'body');
+    P.hover(tr, (f) => {
+      const hl = $('hoverLine'), tip = $('hoverTip');
+      if (f === null) { hl.style.display = tip.style.display = 'none'; return; }
+      const t = player.s.trip; hl.style.display = tip.style.display = 'block'; hl.style.left = tip.style.left = f * 100 + '%';
+      tip.textContent = `${P.clock(t, f)}   ${P.num(P.val(t.speed, f), 0)} km/h   ${P.num(P.val(t.altitude, f), 0)} m`;
+    });
+    new ResizeObserver(() => layoutTrack(player.s.trip)).observe(tr);
+    if (document.fonts) document.fonts.ready.then(() => layoutTrack(player.s.trip));
+    player.on((s, why) => {
+      if (why === 'init' || why === 'trip') { renderStatic(s.trip); renderSel(s); renderState(s); }
+      if (why === 'sel') moveSel(s);
+      if (why === 'state') renderState(s);
+      renderTime(s);
+    });
+    requestAnimationFrame(() => { mv.fit(); layoutTrack(player.s.trip); renderTime(player.s); });
+  }
+  function copyCoord(text) { P.copy(text).then((ok) => P.toast($('toast'), ok ? `Coordenada copiada: ${text}` : 'Não foi possível copiar. Selecione o texto e copie manualmente.')); }
+  P.keys(player, (e) => { if ((e.key === 'c' || e.key === 'C') && !$('viewDet').hidden) swap(); });
+  route();
+})();
+</script>
+</body>
+</html>

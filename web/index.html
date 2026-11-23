@@ -1,1498 +1,1675 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estúdio de viagem DDPAI</title>
-    <link rel="icon" type="image/x-icon" href="../favicon.ico">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diário de viagens</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* Aplica o tema guardado antes da primeira pintura, para a página não piscar. */
+try { const saved = localStorage.getItem('theme'); if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved; } catch (e) { /* sem armazenamento: segue o tema do sistema */ }
+</script>
+<style>
+/* Diário de viagens, tela de detalhe. Ardósia sobre cinza frio; amarelo de faixa de estrada marca o "agora";
+   azul de placa de serviço marca seleção e ações. Títulos em Familjen Grotesk, leitura em Atkinson Hyperlegible. */
+:root {
+  color-scheme: light;
+  --paper: #f2f4f6; --card: #ffffff; --card-2: #f6f8fa; --line: #dce2e8;
+  --ink: #1b2733; --ink-2: #4e5d6b; --ink-3: #6f7d8a;
+  --yellow: #f2b705; --yellow-ink: #2a2100; --yellow-soft: #fff3c4;
+  --blue: #1d5fa8; --blue-wash: rgba(29, 95, 168, .12);
+  --green: #2f7d4f; --red: #c2381f; --gapc: #8a6a00;
+  --shadow: 0 1px 2px rgba(27, 39, 51, .06), 0 8px 24px rgba(27, 39, 51, .08);
+  --tile-filter: saturate(.35) contrast(.95) brightness(1.03);
+  --r-card: 16px; --r-media: 12px; --r-ctl: 999px;
+  --gut-l: max(16px, env(safe-area-inset-left, 0px)); --gut-r: max(16px, env(safe-area-inset-right, 0px));
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #161d24; --card: #1f2830; --card-2: #26313a; --line: #2f3a45;
+  --ink: #e8edf1; --ink-2: #a9b5c0; --ink-3: #8794a0;
+  --yellow: #f5c430; --yellow-ink: #241c00; --yellow-soft: rgba(245, 196, 48, .14);
+  --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
+  --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+  --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #161d24; --card: #1f2830; --card-2: #26313a; --line: #2f3a45;
+    --ink: #e8edf1; --ink-2: #a9b5c0; --ink-3: #8794a0;
+    --yellow: #f5c430; --yellow-ink: #241c00; --yellow-soft: rgba(245, 196, 48, .14);
+    --blue: #6aa6e8; --blue-wash: rgba(106, 166, 232, .16);
+    --green: #5cbf86; --red: #ff7a66; --gapc: #f2c75c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px rgba(0, 0, 0, .35);
+    --tile-filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.85) contrast(.9);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 400 15px/1.45 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+/* números e horários na grotesca: o zero cortado da Atkinson fica só no texto corrido */
+.clock span, .dstats b, .dstats span, .readouts b, .readouts span, .chlist time, .chlist p, .axis, .coordbar, .coordbar span,
+.badge, .trip-item, .trip-item .meta, .trips h3, .picker .sub, .chip, .routepop, .pnote, .tip, .qmini, .pill, .overlay, .camname { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.disp { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; letter-spacing: -.015em; }
+[hidden] { display: none !important; }
+.wrap { padding: 0 var(--gut-r) 0 var(--gut-l); }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f5;
-        }
+/* ---------- comuns ---------- */
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--card); cursor: pointer; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-3); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.btn.s { height: 34px; padding: 0 12px; font-size: 13.5px; }
+.btn .i { width: 17px; height: 17px; }
+.icon { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--ink-2); }
+.icon:hover { background: var(--card-2); color: var(--ink); }
+.popwrap { position: relative; min-width: 0; }
+.pop { position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; min-width: 260px; padding: 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.pop.left { left: 0; right: auto; }
+.pop.up { top: auto; bottom: calc(100% + 8px); }
+.mi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; text-align: left; font-size: 14.5px; }
+.mi:hover, .mi:focus-visible { background: var(--card-2); }
+.mi .i { color: var(--ink-3); }
+.msep { height: 1px; background: var(--line); margin: 5px 6px; }
+.pnote { margin: 6px 10px; font-size: 13px; color: var(--ink-2); max-width: 300px; }
 
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+/* ---------- estados sem viagem ---------- */
+.state { max-width: 560px; margin: 12vh auto 0; padding: 28px; border-radius: var(--r-card); background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 12px; }
+.state h1 { margin: 0; font-size: 28px; line-height: 1.1; }
+.state p { margin: 0; color: var(--ink-2); }
+.state code { display: block; padding: 10px 12px; border-radius: 10px; background: var(--card-2); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; white-space: nowrap; }
+.state .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-        .header {
-            background: linear-gradient(135deg, #4a56c9 0%, #764ba2 100%);
-            padding: 30px;
-            border-radius: 8px;
-            color: white;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
+/* ---------- detalhe ---------- */
+.app { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; padding-bottom: 14px; }
+.top { display: flex; align-items: center; gap: 14px; padding-top: 12px; min-width: 0; }
+.top > .popwrap:first-child { flex: 0 1 auto; max-width: 46%; padding-right: 12px; }
+.picker-h { margin: 0; min-width: 0; font-size: inherit; font-weight: inherit; }
+.picker { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 12px; margin-left: -12px; border: 0; border-radius: 14px; background: none; cursor: pointer; text-align: left; }
+.picker:hover, .picker[aria-expanded=true] { background: var(--card); box-shadow: var(--shadow); }
+.picker .txt { display: grid; min-width: 0; }
+.picker .ttl { font-size: 26px; line-height: 1.1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker .sub { color: var(--ink-2); font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dstats { display: flex; gap: 22px; margin-left: 8px; padding-left: 18px; border-left: 1px solid var(--line); }
+.dstats div { display: grid; line-height: 1.15; }
+.dstats b { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.dstats span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.grow { flex: 1; }
+.trips { width: 440px; max-width: calc(100vw - 32px); max-height: min(70vh, 560px); overflow: auto; padding: 8px; }
+.trips h3 { margin: 10px 8px 4px; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.trips h3:first-child { margin-top: 2px; }
+.trip-item { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; padding: 8px; border: 0; border-radius: 12px; background: none; cursor: pointer; text-align: left; }
+.trip-item:hover { background: var(--card-2); }
+.trip-item[aria-current=true] { background: var(--blue-wash); }
+.trip-item svg.thumb { width: 72px; height: 48px; border-radius: 8px; background: var(--card-2); }
+.trip-item .thumb path { fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.trip-item b { display: block; font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 16px; }
+.trip-item .meta { color: var(--ink-2); font-size: 13.5px; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(200px, 1fr) minmax(0, 1.05fr); grid-template-areas: "stage map" "stage chapters"; gap: 14px; min-height: 0; }
+.main.map-big { grid-template-areas: "map stage" "map chapters"; }
+.side { display: contents; }
+.stagebox { grid-area: stage; position: relative; background: #0c0f12; border-radius: var(--r-card); overflow: hidden; container-type: size; display: grid; place-items: center; min-height: 0; }
+.main.map-big .stagebox { grid-template-columns: 100%; }
+.stage { position: relative; width: min(100cqw, calc(100cqh * 16 / 9)); height: min(100cqh, calc(100cqw * 9 / 16)); }
+.cam { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.stage.pip .cam[data-camera=rear], .stage.pip.swapped .cam[data-camera=front] { inset: auto 16px 16px auto; width: 30%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--r-media); box-shadow: 0 0 0 3px rgba(255, 255, 255, .9), 0 10px 30px rgba(0, 0, 0, .4); z-index: 2; cursor: pointer; }
+.stage.pip.swapped .cam[data-camera=rear] { inset: 0; width: auto; aspect-ratio: auto; border-radius: 0; box-shadow: none; z-index: 0; cursor: auto; }
+.stage.side { width: min(100cqw, calc(100cqh * 32 / 9)); height: min(100cqh, calc(100cqw * 9 / 32)); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.stage.side .cam { position: relative; inset: auto; }
+.stage.side .cam.main { box-shadow: inset 0 0 0 3px var(--yellow); }
+.camname { position: absolute; z-index: 2; left: 14px; top: 14px; height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; background: rgba(12, 15, 18, .6); color: #fff; font-size: 13.5px; font-weight: 700; backdrop-filter: blur(6px); pointer-events: none; }
+.stage.pip .cam:not(.main) .camname { left: 8px; top: 8px; height: 24px; font-size: 12px; padding: 0 9px; }
+.overlay { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; gap: 6px; text-align: center; color: #eef2f5; font-size: 14px; padding: 10px; pointer-events: none; }
+.overlay.loading { background: rgba(12, 15, 18, .55); font-weight: 700; }
+.overlay.note { background: repeating-linear-gradient(135deg, rgba(22, 29, 36, .94) 0 10px, rgba(33, 41, 49, .94) 10px 20px); }
+.stage.pip .cam:not(.main) .overlay { font-size: 12px; }
+.stage-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 8px; text-align: center; padding: 24px; color: #d9e0e6; background: repeating-linear-gradient(135deg, #141a20 0 14px, #19212a 14px 28px); }
+.stage-empty b { font: 700 24px/1.1 'Familjen Grotesk', system-ui, sans-serif; color: #fff; }
+.stage-empty .i { width: 30px; height: 30px; margin: 0 auto; }
+.stage-play { position: absolute; z-index: 3; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--yellow); color: var(--yellow-ink); cursor: pointer; box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+.stage.side .stage-play { left: calc(25% - 1px); }   /* centro da câmera principal (coluna esquerda: frente); o botão fica dentro de #stage */
+.stage.side.rear-main .stage-play { left: calc(75% + 1px); }
+.stage-play:hover { filter: brightness(1.06); }
+.stage-play .i { width: 34px; height: 34px; margin-left: 3px; }
+.stagectl { position: absolute; z-index: 3; right: 14px; top: 14px; display: flex; gap: 6px; }
+.stagectl button { height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 999px; background: rgba(12, 15, 18, .6); color: #fff; cursor: pointer; font-size: 13.5px; font-weight: 700; backdrop-filter: blur(6px); }
+.stagectl button:hover { background: rgba(12, 15, 18, .8); }
+.stagectl button:disabled { opacity: .45; cursor: default; }
+.stagectl button[aria-pressed=true] { background: var(--yellow); color: var(--yellow-ink); }
+.stagectl .i { width: 17px; height: 17px; }
+.mapcard { grid-area: map; position: relative; isolation: isolate; border-radius: var(--r-card); overflow: hidden; background: var(--card-2); border: 1px solid var(--line); min-height: 0; }
+#map { position: absolute; inset: 0; background: var(--card-2); font: inherit; }
+.mapbtns { position: absolute; z-index: 1000; right: 10px; top: 10px; display: flex; gap: 6px; }
+.mapbtns button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--card); box-shadow: var(--shadow); cursor: pointer; color: var(--ink-2); }
+.mapbtns button[aria-pressed=true] { color: var(--blue); background: var(--blue-wash); box-shadow: inset 0 0 0 2px var(--blue); }
+.mapbtns .i { width: 17px; height: 17px; }
+.leaflet-container { font-family: inherit; }
+.leaflet-tile-pane { filter: var(--tile-filter); }
+.leaflet-container .leaflet-control-attribution { background: var(--card); color: var(--ink); }   /* seletor do Leaflet tem especificidade maior */
+.leaflet-container .leaflet-control-attribution a { color: var(--blue); text-decoration: underline; }
+.chapters { grid-area: chapters; background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); overflow: auto; padding: 14px 10px 10px 14px; min-height: 0; }
+.chapters h2 { margin: 0 0 6px 4px; font-size: 18px; font-weight: 700; }
+.chlist { list-style: none; margin: 0; padding: 0; position: relative; }
+.chlist::before { content: ''; position: absolute; left: 21px; top: 16px; bottom: 16px; width: 3px; border-radius: 2px; background: var(--line); }
+.chlist button { position: relative; width: 100%; display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: start; padding: 7px 8px 7px 4px; border: 0; border-radius: 12px; background: none; cursor: pointer; text-align: left; }
+.chlist button:hover { background: var(--card-2); }
+.dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 2.5px solid var(--ink-3); color: var(--ink-2); position: relative; z-index: 1; }
+.dot .i { width: 16px; height: 16px; }
+li[data-type=max] .dot { border-color: var(--red); color: var(--red); }
+li[data-type=stop] .dot { border-color: var(--blue); color: var(--blue); }
+li[data-type=climb] .dot, li[data-type=descent] .dot { border-color: var(--green); color: var(--green); }
+li[data-type=gap] .dot { border-color: var(--gapc); color: var(--gapc); border-style: dashed; }
+li[data-type=start] .dot, li[data-type=end] .dot { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.chlist b { display: block; font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 16.5px; font-weight: 600; letter-spacing: -.01em; }
+.chlist p { margin: 1px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.35; }
+.chlist time { color: var(--ink-3); font-size: 13.5px; padding-top: 2px; }
+.chlist li.now button { background: var(--yellow-soft); }
+.chlist li.now time { color: var(--ink); font-weight: 700; }
+.here { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; background: var(--yellow); color: var(--yellow-ink); font: 700 11.5px/18px 'Atkinson Hyperlegible', sans-serif; vertical-align: 2px; }
 
-        .title {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
+/* ---------- barra da história ---------- */
+.story { background: var(--card); border-radius: var(--r-card); border: 1px solid var(--line); padding: 10px 22px 12px; }
+.trow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tc { display: flex; align-items: center; gap: 4px; }
+.tb { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.tb:hover { background: var(--card-2); }
+.tb .i { width: 23px; height: 23px; }
+.tb.play { width: 48px; height: 48px; background: var(--yellow); color: var(--yellow-ink); }
+.tb.play:hover { filter: brightness(1.05); background: var(--yellow); }
+.tb.play:disabled { background: var(--card-2); color: var(--ink-3); cursor: default; filter: none; }
+.tb.play .i { width: 21px; height: 21px; }
+.clock { display: grid; line-height: 1.1; }
+.clock b { font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.clock span { font-size: 13px; color: var(--ink-3); white-space: nowrap; min-height: 1.1em; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card-2); }
+.seg button { height: 30px; min-width: 40px; padding: 0 10px; border: 0; border-radius: 999px; background: none; cursor: pointer; font-weight: 700; font-size: 13.5px; color: var(--ink-2); }
+.seg button[aria-pressed=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.readouts { display: flex; gap: 18px; padding-left: 14px; border-left: 1px solid var(--line); }
+.readouts div { display: grid; line-height: 1.15; }
+.readouts b { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.readouts span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.tl-wrap { position: relative; margin-top: 8px; }
+.timeline { position: relative; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 8px; }
+.timeline svg { display: block; overflow: visible; }
+.timeline text { font-family: 'Familjen Grotesk', 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 12px; fill: var(--ink-3); }
+.tl-base { fill: var(--line); }
+.tl-done { fill: var(--ink); }
+.tl-seg.climb, .tl-seg.descent { fill: var(--green); }
+.tl-seg.stop { fill: var(--blue); }
+.tl-seg.gap { fill: url(#tl-hatch); }
+.tl-seg { opacity: .85; }
+.tl-stn { fill: var(--card); stroke: var(--ink); stroke-width: 3; }
+.tl-st { cursor: pointer; }
+.tl-st rect { fill: var(--card); stroke: var(--line); }
+.tl-st:hover rect { stroke: var(--ink-3); }
+.tl-st text { fill: var(--ink); font-size: 13px; font-weight: 700; }
+.tl-ic { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--ink-3); }
+.tl-st[data-type=max] .tl-ic { color: var(--red); } .tl-st[data-type=stop] .tl-ic { color: var(--blue); } .tl-st[data-type=climb] .tl-ic, .tl-st[data-type=descent] .tl-ic { color: var(--green); } .tl-st[data-type=gap] .tl-ic { color: var(--gapc); }
+.tl-sp-a { fill: var(--ink); opacity: .08; } .tl-sp-l { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-linejoin: round; }
+.tl-al-a { fill: var(--green); opacity: .12; } .tl-al-l { fill: none; stroke: var(--green); stroke-width: 1.5; stroke-linejoin: round; }
+.tl-tick { stroke: var(--line); stroke-width: 1; }
+.tl-play { pointer-events: none; }
+.tl-play rect { fill: var(--yellow); stroke: rgba(0, 0, 0, .15); stroke-width: 1; }
+.tl-play circle { fill: var(--yellow); stroke: var(--card); stroke-width: 3; }
+.lock { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink-2); }
+.lock[aria-pressed=false] { background: var(--yellow-soft); color: var(--ink); border-color: transparent; }
+.lock .i { width: 17px; height: 17px; }
 
-        .subtitle {
-            font-size: 16px;
-            opacity: 0.9;
-        }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; cursor: help; white-space: nowrap; color: var(--ink-2); }
+.pill .i { width: 17px; height: 17px; color: var(--green); }
+.pill[data-tone=warn] { background: var(--yellow-soft); border-color: transparent; color: var(--ink); }
+.pill[data-tone=warn] .i { color: var(--gapc); }
+.pill[data-tone=none] .i { color: var(--ink-3); }
+.tipwrap { position: relative; }
+.tip { position: absolute; z-index: 30; top: calc(100% + 10px); right: 0; width: 300px; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: var(--card); font-size: 14px; line-height: 1.45; opacity: 0; visibility: hidden; transition: opacity .15s; box-shadow: var(--shadow); }
+.tipwrap:hover .tip, .tipwrap:focus-within .tip, .tipwrap.show .tip { opacity: 1; visibility: visible; }
+.tipwrap.dismissed .tip { opacity: 0; visibility: hidden; }
+.qmini { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+.qmini .i { width: 14px; height: 14px; color: var(--green); }
+.qmini[data-tone=warn] { color: var(--ink); } .qmini[data-tone=warn] .i { color: var(--gapc); } .qmini[data-tone=none] .i { color: var(--ink-3); }
+.coordbar { position: absolute; z-index: 1000; left: 10px; right: 10px; bottom: 28px; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow); font-size: 13px; }
+.coordbar > .i { color: var(--ink-3); }
+.coordbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip[aria-expanded=true], .chip.has { background: var(--blue-wash); border-color: transparent; color: var(--blue); }
+.routepop { width: 320px; padding: 14px; }
+.routepop h3 { margin: 0; font-size: 13px; color: var(--ink-3); font-weight: 400; }
+.routepop .rng-t { font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 24px; font-weight: 700; margin: 2px 0; }
+.routepop .rng-s { color: var(--ink-2); }
+.rowb { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.routepop .pnote { margin: 10px 0 0; }
+#route-message:empty { display: none; }
+.sel-layer { position: absolute; inset: 0; pointer-events: none; }
+.sel-range { position: absolute; top: 30px; height: 94px; background: var(--blue-wash); box-shadow: inset 2px 0 0 var(--blue), inset -2px 0 0 var(--blue); border-radius: 4px; }
+.sel-h { position: absolute; top: 46px; width: 16px; height: 42px; margin-left: -8px; border-radius: 8px; background: var(--blue); box-shadow: 0 0 0 2px var(--card); cursor: ew-resize; pointer-events: auto; touch-action: none; }
+.sel-h::after { content: ''; position: absolute; left: 7px; top: 11px; bottom: 11px; width: 2px; border-radius: 1px; background: rgba(255, 255, 255, .75); }
+.sel-h:focus-visible { outline-color: var(--ink); }
+.techpanel { padding: 8px 12px 10px; width: 340px; max-width: 100%; }
+.techpanel dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 13px; }
+.techpanel dt { color: var(--ink-3); } .techpanel dd { margin: 0; overflow-wrap: anywhere; }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            font-size: 18px;
-            color: #666;
-        }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr) 320px; } .dstats div:nth-child(4) { display: none; } }
 
-        .error {
-            background: #fee;
-            border: 1px solid #fcc;
-            color: #c33;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-            font-family: monospace;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        .main {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .sidebar {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .trip-item {
-            padding: 15px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .trip-item:hover {
-            background: #f9f9f9;
-        }
-
-        .trip-item.active {
-            background: #4a56c9;
-            color: white;
-            border-left: 4px solid #764ba2;
-        }
-
-        .trip-date {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .trip-meta {
-            font-size: 12px;
-            color: #555;
-        }
-
-        .trip-item.active .trip-meta {
-            color: #fff;
-        }
-
-        .content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        #map {
-            width: 100%;
-            height: 500px;
-            border-radius: 6px;
-        }
-        .map-card:fullscreen, .map-card.expanded { background: white; padding: 12px; display: flex; flex-direction: column; }
-        .map-card.expanded { position: fixed; inset: 0; z-index: 10000; }
-        .map-card:fullscreen #map, .map-card.expanded #map { flex: 1; height: auto; }
-        .route-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
-        .route-tools button { padding: 8px 10px; cursor: pointer; }
-        .timeline { width: 100%; margin: 10px 0; }
-        .content { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); }
-
-        .charts {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .chart-container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            position: relative;
-            height: 240px;
-        }
-
-        .chart-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .videos-section {
-            grid-column: 1 / -1;
-        }
-
-        .videos-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .video-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .video-card h3 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 15px;
-        }
-
-        .video-badge {
-            background: #c62828;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .video-card video {
-            width: 100%;
-            height: auto;
-            background: #000;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            display: block;
-            cursor: pointer;
-        }
-
-        .video-path {
-            font-size: 11px;
-            color: #595959;
-            padding: 10px;
-            background: #fafafa;
-            border-left: 3px solid #667eea;
-            border-radius: 4px;
-            font-family: monospace;
-            word-break: break-all;
-        }
-
-        .video-unavailable {
-            color: #999;
-            font-style: italic;
-        }
-
-        .video-not-available {
-            background: #f5f5f5;
-            color: #595959;
-            padding: 40px 20px;
-            text-align: center;
-            border-radius: 6px;
-            border: 2px dashed #ddd;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-
-        #videoStatus {
-            background-color: #fffaeb;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-left: 4px solid #ffb300;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-
-        #videoStatus .status-ok {
-            color: #1b6b32;
-        }
-
-        #videoStatus .status-warning {
-            color: #8a4600;
-        }
-
-        #videoStatus .status-error {
-            color: #b3261e;
-        }
-
-        /* Idle segment styles */
-        .idle-segment {
-            color: #999;
-            opacity: 0.5;
-            stroke: #888;
-            stroke-width: 3;
-            stroke-dasharray: 5, 5;  /* Dashed line for idle */
-        }
-
-        .active-segment {
-            color: #0066cc;
-            opacity: 0.8;
-            stroke: #0066cc;
-            stroke-width: 3;
-        }
-
-        .idle-info {
-            background-color: #f5f5f5;
-            border-left: 4px solid #999;
-            padding: 8px 12px;
-            margin: 8px 0;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-
-        #trip-details {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-top: 20px;
-        }
-
-        #trip-details h3 {
-            font-size: 16px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 12px;
-        }
-
-        .trip-stat {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-            font-size: 13px;
-        }
-
-        .trip-stat:last-child {
-            border-bottom: none;
-        }
-
-        .trip-stat-label {
-            font-weight: 500;
-            color: #555;
-        }
-
-        .trip-stat-value {
-            color: #2c3e50;
-        }
-
-        /* Sync mode toggle styles */
-        #sync-mode-toggle {
-            margin: 10px 0;
-            padding: 15px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            border-left: 4px solid #667eea;
-        }
-
-        #sync-mode-toggle label {
-            font-weight: 600;
-            margin-right: 10px;
-            color: #2c3e50;
-        }
-
-        .sync-btn {
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            padding: 5px 10px;
-            margin: 0 5px;
-            background: white;
-            color: #2c3e50;
-        }
-
-        .sync-btn:hover {
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            transform: translateY(-1px);
-        }
-
-        .sync-btn.active {
-            background: #2e7d32;
-            color: white;
-            border-color: #2e7d32;
-        }
-
-        #video-time-indicator {
-            background: white;
-            padding: 10px;
-            border-radius: 4px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            font-size: 14px;
-            font-weight: 500;
-            color: #4a56c9;
-        }
-
-        #video-end-badge {
-            background: #fff3cd;
-            padding: 10px 15px;
-            border-radius: 4px;
-            border: 2px solid #ffc107;
-            color: #856404;
-            font-weight: 600;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-
-        #map-coordinate-control {
-            background: white;
-            padding: 10px;
-            border-radius: 4px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            font-size: 12px;
-            color: #2c3e50;
-        }
-
-        #map-coordinate-value {
-            display: block;
-            margin: 4px 0 8px;
-            font-family: monospace;
-            font-weight: 600;
-        }
-
-        #copy-map-coordinate {
-            border: 0;
-            border-radius: 3px;
-            padding: 5px 8px;
-            background: #4a56c9;
-            color: white;
-            cursor: pointer;
-        }
-
-        /* Foco visível para navegação por teclado */
-        a:focus-visible, button:focus-visible, input:focus-visible, video:focus-visible, [role="button"]:focus-visible {
-            outline: 3px solid #1a237e;
-            outline-offset: 2px;
-            box-shadow: 0 0 0 5px #fff;
-        }
-
-        .route-message { color: #9a4800; font-size: 13px; }
-
-        @media (max-width: 1024px) {
-            .main {
-                grid-template-columns: 1fr;
-            }
-            .content {
-                grid-template-columns: 1fr;
-            }
-            .sidebar {
-                max-height: none;
-            }
-        }
-
-        @media (max-width: 700px) {
-            .container { padding: 10px; }
-            .header { padding: 18px; }
-            .title { font-size: 24px; }
-            .card, .video-card, #trip-details, .chart-container { padding: 12px; }
-            .videos-grid { grid-template-columns: 1fr; }
-            #map { height: 340px; }
-            .route-tools button { flex: 1 1 140px; }
-        }
-    </style>
+/* ---------- celular ---------- */
+@media (max-width: 700px) {
+  .app { height: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; }
+  .top { flex-wrap: wrap; gap: 8px; }
+  .picker { order: 1; flex: 1; min-width: 0; }
+  .top .grow { display: none; }
+  .top > .popwrap:first-child { flex: 1; max-width: none; }
+  .dstats { order: 5; flex-basis: 100%; margin: 0; padding: 0; border: 0; justify-content: space-between; gap: 8px; }
+  .dstats b { font-size: 17px; }
+  .dstats div:nth-child(4) { display: grid; }
+  .picker .ttl { font-size: 24px; }
+  .main { display: contents; }
+  .stagebox { order: 2; aspect-ratio: 16 / 9; width: 100%; border-radius: 14px; }
+  .story { order: 3; padding: 10px 14px 12px; }
+  .trow { gap: 10px; }
+  .clock b { font-size: 22px; }
+  .readouts { order: 6; flex-basis: 100%; border: 0; padding: 0; justify-content: space-between; }
+  .mapcard { order: 4; height: 300px; }
+  .chapters { order: 5; overflow: visible; }
+  .main.map-big .mapcard { height: 70vh; }
+  .stagectl { right: 8px; top: 8px; } .stagectl button .lbl { display: none; } .stagectl button { padding: 0 9px; height: 30px; }
+  .camname { left: 8px; top: 8px; height: 24px; font-size: 12px; padding: 0 9px; }
+  .stage.pip .cam[data-camera=rear], .stage.pip.swapped .cam[data-camera=front] { inset: auto 8px 8px auto; width: 34%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9); }
+  .stage.pip .cam:not(.main) .camname { display: none; }
+  .pop { right: auto; left: 0; }
+  .top .pop { left: auto; right: 0; }
+  .top > .popwrap:first-child .pop { left: 0; right: auto; }
+  .story .pop { right: 0; left: auto; }
+  .routepop { width: min(320px, calc(100vw - 32px)); }
+  .pill .lbl { display: none; } .pill { padding: 0 9px; }
+  .tip { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; }
+  .trips { width: calc(100vw - 32px); }
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="title">🎬 Estúdio de viagem</div>
-            <div class="subtitle">Explore suas viagens, vídeos e rotas</div>
-        </div>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.6v14.8L19 12z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-back10" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 3.8v4.5H9"/><text x="12.4" y="15.4" font-size="7.6" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></symbol>
+<symbol id="i-fwd10" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 3.8v4.5H15"/><text x="11.6" y="15.4" font-size="7.6" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10.2 13.8a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M13.8 10.2a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+<symbol id="i-unlink" viewBox="0 0 24 24"><path d="M15.6 13.6l3-3a4 4 0 0 0-5.7-5.7l-1 1M8.4 10.4l-3 3a4 4 0 0 0 5.7 5.7l1-1"/><path d="M4 4l16 16"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></symbol>
+<symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 6.8-1.2"/></symbol>
+<symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 7.5h12l-3.2-3.2M17 16.5H5l3.2 3.2"/></symbol>
+<symbol id="i-pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1.6"/><rect x="12.2" y="11.4" width="6.6" height="5.4" rx=".8" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-split" viewBox="0 0 24 24"><rect x="2.8" y="6.5" width="8.6" height="11" rx="1.3"/><rect x="12.6" y="6.5" width="8.6" height="11" rx="1.3"/></symbol>
+<symbol id="i-single" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1.6"/></symbol>
+<symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></symbol>
+<symbol id="i-collapse" viewBox="0 0 24 24"><path d="M19.5 10H14V4.5M4.5 14H10v5.5M14 10l6-6M10 14l-6 6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.2 10.4 12 15.2l4.8-4.8M5 20h14"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.5M12 7.6v.4"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 4.3 2.9 17.5A2 2 0 0 0 4.6 20.5h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.3M12 16.8v.3"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M8.3 12.4l2.5 2.5 5-5.2"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M6.5 9.5 12 15l5.5-5.5"/></symbol>
+<symbol id="i-chevR" viewBox="0 0 24 24"><path d="M9.5 6.5 15 12l-5.5 5.5"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5.5M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.2"/><path d="M10 17V7h3a3 3 0 0 1 0 6h-3"/></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 16.5a8 8 0 1 1 16 0"/><path d="M12 16.5l4.2-4.8"/><circle cx="12" cy="16.5" r="1" fill="currentColor"/></symbol>
+<symbol id="i-climb" viewBox="0 0 24 24"><path d="M2.5 19.5 9 9.5l4 6 2.6-3.8 5.9 7.8z"/><path d="M15.5 4.5h4v4"/><path d="M19.5 4.5l-4.5 4.5"/></symbol>
+<symbol id="i-descent" viewBox="0 0 24 24"><path d="M2.5 19.5 9 9.5l4 6 2.6-3.8 5.9 7.8z"/><path d="M19.5 8.5h-4v-4"/><path d="M15.5 8.5l4-4"/></symbol>
+<symbol id="i-nofilm" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="1.6"/><path d="M15.5 10.5l5.5-3v9l-5.5-3"/><path d="M3.5 3.5l17 17"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5.5 21V4M5.5 4.5h11.5l-2.4 3.9 2.4 3.9H5.5"/></symbol>
+<symbol id="i-finish" viewBox="0 0 24 24"><path d="M5.5 21V4"/><path d="M5.5 4.5h13v8.5h-13z"/><path d="M9.8 4.5v8.5M14.2 4.5v8.5M5.5 8.7h13"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.8"/><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="i-cam" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="1.6"/><path d="M15.5 10.5l5.5-3v9l-5.5-3"/></symbol>
+<symbol id="i-markIn" viewBox="0 0 24 24"><path d="M9.5 5H6v14h3.5"/><path d="M12 12h7.5M16.5 9l3 3-3 3"/></symbol>
+<symbol id="i-markOut" viewBox="0 0 24 24"><path d="M14.5 5H18v14h-3.5"/><path d="M4.5 12H12M9 9l3 3-3 3"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7.5 14h9"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 4 3 8.5l9 4.5 9-4.5z"/><path d="M3 12.5 12 17l9-4.5M3 16.5 12 21l9-4.5"/></symbol>
+<symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+<symbol id="i-dock" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/></symbol>
+</svg>
 
-        <div id="app-content">
-            <div class="loading" role="status">📊 Carregando banco de viagens...</div>
-        </div>
+<main id="empty-state" class="wrap" hidden>
+  <div class="state">
+    <h1 class="disp">Nenhuma viagem importada ainda</h1>
+    <p>Depois de importar o cartão da câmera, as viagens aparecem aqui. Para importar, rode este comando no terminal e recarregue a página:</p>
+    <code id="import-command">python3 -m src.processing.trip_import</code>
+    <div class="row">
+      <button type="button" class="btn primary" id="copy-import"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copiar comando</button>
+      <span id="copy-import-status" role="status"></span>
     </div>
+  </div>
+</main>
+<main id="fatal-state" class="wrap" hidden>
+  <div class="state" role="alert">
+    <h1 class="disp">Não foi possível abrir as viagens</h1>
+    <p id="fatal-reason"></p>
+    <p>Confira se o servidor local está rodando (<span style="white-space:nowrap">./run.sh</span>) e recarregue a página.</p>
+  </div>
+</main>
 
-    <script src="video-sync.js"></script>
-    <script>
-        let speedChart = null;
-        let altitudeChart = null;
-        let currentMap = null;
-        let currentRouteLayer = null;
-        let currentGroup = null;
-        let currentPlayheadIndex = 0;  // Track playhead position for charts
-        let routeStart = null, routeEnd = null, selectionLayer = null;
-        let followVehicle = false;
+<div id="app" class="wrap app" hidden>
+  <header class="top">
+    <div class="popwrap">
+      <h1 class="picker-h disp"><button type="button" id="trip-picker" class="picker" aria-haspopup="true" aria-expanded="false" aria-controls="trip-popover">
+        <span class="txt"><span class="ttl" id="trip-title">Viagem</span><span class="sub" id="trip-sub"></span></span>
+        <svg class="i" aria-hidden="true"><use href="#i-chev"/></svg>
+      </button></h1>
+      <div class="pop left trips" id="trip-popover" role="group" aria-label="Escolher viagem" hidden><div id="trip-list"></div></div>
+    </div>
+    <div class="dstats" id="kpis" aria-label="Resumo da viagem"></div>
+    <div class="grow"></div>
+    <div class="tipwrap" id="quality-wrap">
+      <button type="button" class="pill" id="quality-pill" data-tone="none" aria-describedby="quality-tip"><svg class="i" aria-hidden="true"><use id="quality-icon" href="#i-info"/></svg><span class="lbl" id="quality-text">Sem sincronização fina</span></button>
+      <div class="tip" role="tooltip" id="quality-tip"></div>
+    </div>
+    <button type="button" class="icon" id="theme-toggle" title="Alternar tema claro/escuro"><svg class="i" aria-hidden="true"><use id="theme-icon" href="#i-moon"/></svg><span class="sr">Alternar tema claro/escuro</span></button>
+    <div class="popwrap">
+      <button type="button" class="icon" id="more-button" aria-haspopup="true" aria-expanded="false" aria-controls="more-popover" title="Mais ações"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg><span class="sr">Mais ações</span></button>
+      <div class="pop" id="more-popover" role="group" aria-label="Mais ações" hidden>
+        <button type="button" class="mi" id="copy-current-coordinate"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copiar coordenada do ponto atual</button>
+        <div class="msep" role="separator"></div>
+        <button type="button" class="mi" id="tech-toggle" aria-expanded="false" aria-controls="tech-details"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg>Detalhes técnicos</button>
+        <div class="techpanel" id="tech-details" hidden></div>
+        <button type="button" class="mi" id="keys-toggle" aria-expanded="false" aria-controls="keys-help"><svg class="i" aria-hidden="true"><use href="#i-keyboard"/></svg>Atalhos de teclado</button>
+        <div class="techpanel" id="keys-help" hidden>
+          <dl>
+            <dt>Espaço ou K</dt><dd>Reproduzir ou pausar</dd>
+            <dt>← → ou J L</dt><dd>Voltar ou avançar 10 s (com Shift, 1 min)</dd>
+            <dt>I e O</dt><dd>Marcar início e fim do trecho</dd>
+            <dt>M</dt><dd>Ampliar ou reduzir o mapa</dd>
+            <dt>C</dt><dd>Trocar a câmera principal</dd>
+            <dt>Esc</dt><dd>Fechar menus</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </header>
 
-        // Sync state management
-        let syncState = {
-            mode: 'linked',           // 'independent' or 'linked'
-            activeVideo: null,        // 'rear' or 'front'
-            isSyncing: false,         // prevent circular updates
-            lastUpdateSource: null    // 'video' or 'map'
-        };
+  <div class="main" id="main">
+    <section class="stagebox" aria-label="Vídeos das câmeras">
+      <div class="stage pip" id="stage">
+        <div class="cam main" id="cam-front" data-camera="front">
+          <video id="video-front" aria-label="Câmera dianteira" preload="none" playsinline></video>
+          <span class="camname">Câmera dianteira</span>
+          <div class="overlay loading" id="front-loading" hidden>Carregando vídeo…</div>
+          <div class="overlay note" id="front-note" role="status" hidden></div>
+        </div>
+        <div class="cam" id="cam-rear" data-camera="rear">
+          <video id="video-rear" aria-label="Câmera traseira" preload="none" playsinline></video>
+          <span class="camname">Câmera traseira</span>
+          <div class="overlay loading" id="rear-loading" hidden>Carregando vídeo…</div>
+          <div class="overlay note" id="rear-note" role="status" hidden></div>
+        </div>
+        <button type="button" class="stage-play" id="stage-play" aria-label="Reproduzir" title="Reproduzir (espaço)" hidden><svg class="i" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+      <div class="stage-empty" id="stage-empty" role="status" hidden>
+        <svg class="i" aria-hidden="true"><use href="#i-nofilm"/></svg>
+        <b>Viagem sem vídeo</b>
+        <span>O mapa, a linha do tempo e os capítulos continuam disponíveis.</span>
+      </div>
+      <div class="stagectl" id="stagectl">
+        <button type="button" id="layout-side" aria-pressed="false" title="Ver frente e trás lado a lado"><svg class="i" aria-hidden="true"><use href="#i-split"/></svg><span class="lbl">Lado a lado</span></button>
+        <button type="button" id="camera-swap" title="Trocar câmera principal (C)"><svg class="i" aria-hidden="true"><use href="#i-swap"/></svg><span class="lbl">Trocar</span></button>
+      </div>
+    </section>
 
-        // Custom Chart.js plugin to draw playhead line
-        const playheadPlugin = {
-            id: 'playhead',
-            afterDatasetsDraw(chart) {
-                if (currentPlayheadIndex === undefined || currentPlayheadIndex === null) return;
+    <div class="side">
+      <section class="mapcard" aria-label="Mapa da viagem">
+        <div id="map"></div>
+        <div class="mapbtns">
+          <button type="button" id="map-follow" aria-pressed="false" title="Seguir o carro"><svg class="i" aria-hidden="true"><use href="#i-target"/></svg><span class="sr">Seguir o carro</span></button>
+          <button type="button" id="map-fit" title="Ver a rota inteira"><svg class="i" aria-hidden="true"><use href="#i-route"/></svg><span class="sr">Ver a rota inteira</span></button>
+          <button type="button" id="map-expand" aria-pressed="false" title="Ampliar o mapa (M)"><svg class="i" aria-hidden="true"><use id="map-expand-icon" href="#i-expand"/></svg><span class="sr">Ampliar o mapa</span></button>
+        </div>
+        <div class="coordbar" id="coord-bar" role="status" hidden>
+          <svg class="i" aria-hidden="true"><use href="#i-pin"/></svg><span id="map-coordinate-value"></span>
+          <button type="button" class="btn s" id="copy-map-coordinate"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-map-coordinate-label">Copiar</span></button>
+        </div>
+      </section>
+      <section class="chapters" aria-label="Capítulos da viagem">
+        <h2 class="disp">Capítulos</h2>
+        <ol class="chlist" id="chapters"></ol>
+      </section>
+    </div>
+  </div>
 
-                const xScale = chart.scales.x;
-                const yScale = chart.scales.y;
-                const ctx = chart.ctx;
+  <section class="story" aria-label="Reprodução e linha do tempo">
+    <div class="trow">
+      <div class="tc">
+        <button type="button" class="tb" id="back10" aria-label="Voltar 10 segundos" title="Voltar 10 s (←)"><svg class="i" aria-hidden="true"><use href="#i-back10"/></svg></button>
+        <button type="button" class="tb play" id="play" aria-label="Reproduzir" title="Reproduzir (espaço)"><svg class="i" aria-hidden="true"><use id="play-icon" href="#i-play"/></svg></button>
+        <button type="button" class="tb" id="fwd10" aria-label="Avançar 10 segundos" title="Avançar 10 s (→)"><svg class="i" aria-hidden="true"><use href="#i-fwd10"/></svg></button>
+      </div>
+      <div class="clock"><b id="clock">--:--:--</b><span id="elapsed"></span></div>
+      <div class="seg" role="group" aria-label="Velocidade de reprodução">
+        <button type="button" data-rate="1" aria-pressed="true">1×</button>
+        <button type="button" data-rate="2" aria-pressed="false">2×</button>
+        <button type="button" data-rate="4" aria-pressed="false">4×</button>
+      </div>
+      <div class="readouts" role="group" aria-label="Leituras do ponto atual">
+        <div><b id="now-speed">–</b><span>velocidade</span></div>
+        <div><b id="now-alt">–</b><span>altitude</span></div>
+        <div><b id="now-km">–</b><span id="now-km-of">percorridos</span></div>
+      </div>
+      <div class="grow"></div>
+      <button type="button" class="lock" id="sync-lock" aria-pressed="true"><svg class="i" aria-hidden="true"><use id="sync-lock-icon" href="#i-lock"/></svg><span class="sr" id="sync-lock-label">Câmeras juntas</span></button>
+      <div class="popwrap">
+        <button type="button" class="btn s chip" id="route-chip" aria-haspopup="dialog" aria-expanded="false" aria-controls="route-popover"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span id="route-chip-text">Selecionar trecho</span></button>
+        <div class="pop up routepop" id="route-popover" role="dialog" aria-label="Trecho selecionado" hidden>
+          <h3>Trecho</h3>
+          <div class="rng-t" id="route-range">Nenhum trecho marcado</div>
+          <div class="rng-s" id="route-summary">Marque o início e o fim para rever ou exportar um trecho. Atalhos: I e O.</div>
+          <div class="rowb">
+            <button type="button" class="btn s" id="route-mark-start"><svg class="i" aria-hidden="true"><use href="#i-markIn"/></svg>Início aqui</button>
+            <button type="button" class="btn s" id="route-mark-end"><svg class="i" aria-hidden="true"><use href="#i-markOut"/></svg>Fim aqui</button>
+          </div>
+          <div class="rowb">
+            <button type="button" class="btn s primary" id="route-gpx"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Exportar GPX</button>
+            <button type="button" class="btn s" id="route-kml"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>KML</button>
+            <button type="button" class="btn s" id="route-clear"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg>Limpar</button>
+          </div>
+          <p class="pnote">Exporta só a geometria do trecho (o traçado). Em outro aplicativo, a rota pode não seguir exatamente as mesmas ruas.</p>
+          <p class="pnote" id="route-message" role="status"></p>
+        </div>
+      </div>
+    </div>
+    <div class="tl-wrap">
+      <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Posição na viagem" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+      <div class="sel-layer" id="sel-layer" hidden>
+        <div class="sel-range" id="sel-range"></div>
+        <div class="sel-h" id="sel-start" role="slider" tabindex="0" aria-label="Início do trecho" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+        <div class="sel-h" id="sel-end" role="slider" tabindex="0" aria-label="Fim do trecho" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+      </div>
+    </div>
+  </section>
+</div>
 
-                // Get the x pixel position for the current playhead index
-                const xPixel = xScale.getPixelForValue(currentPlayheadIndex);
+<script src="trip-model.js"></script>
+<script src="video-sync.js"></script>
+<script>
+'use strict';
+const CAMERAS = ['front', 'rear'];
+const CAMERA_NAMES = {front: 'dianteira', rear: 'traseira'};
+const CHAPTER_ICONS = {start: 'flag', end: 'finish', stop: 'stop', max: 'gauge', climb: 'climb', descent: 'descent', gap: 'nofilm'};
+const DONE_REDRAW_MS = 250;
+const QUALITY_ICONS = {ok: '#i-check', warn: '#i-warn', none: '#i-info'};
+const TL = {padL: 52, padR: 14, stations: 28, line: 32, speed: 54, speedH: 34, alt: 92, altH: 22, axis: 120, height: 138};
 
-                if (xPixel === undefined) return;
+let trips = [];
+let currentTrip = null;
+let tripIndex = 0;
+let playIndex = 0;           // ponto GPS atual: fonte de verdade do tempo
+let currentRate = 1;
+let layoutMode = 'pip';      // 'pip' ou 'side'
+let followVehicle = false;
+let lastChapter = -1;
+let tripKm = [];             // km acumulados, calculados uma vez por viagem
+let timeline = null;         // geometria da linha do tempo desenhada
+let scrubbing = false;
+let routeStart = null, routeEnd = null;
+let routeLatLngs = [];
+let map = null, tripLayer = null;
+const mapLayers = {};
+let doneTimer = null, lastDoneDraw = 0;
+const cameraFlags = {front: {}, rear: {}};
 
-                // Draw vertical line
-                ctx.save();
-                ctx.strokeStyle = '#FF9800';
-                ctx.lineWidth = 3;
-                ctx.globalAlpha = 0.8;
-                ctx.beginPath();
-                ctx.moveTo(xPixel, yScale.top);
-                ctx.lineTo(xPixel, yScale.bottom);
-                ctx.stroke();
+/* modo de sincronização e câmera principal: o `linkVideos` lê e escreve neste objeto */
+const syncState = {
+    mode: 'linked',          // 'independent' ou 'linked'
+    activeVideo: 'front',    // câmera principal, a que o transporte comanda
+    isSyncing: false,        // evita atualizações circulares
+    lastUpdateSource: null
+};
 
-                // Draw circle at playhead position on first dataset
-                const dataset = chart.data.datasets[0];
-                if (dataset && dataset.data[currentPlayheadIndex] !== undefined) {
-                    const yPixel = yScale.getPixelForValue(dataset.data[currentPlayheadIndex]);
-                    ctx.fillStyle = '#FF9800';
-                    ctx.beginPath();
-                    ctx.arc(xPixel, yPixel, 5, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
+/* ---------- utilidades ---------- */
+const $ = id => document.getElementById(id);
+const cameraVideo = camera => $('video-' + camera);
+const cameraOf = video => video.id.replace('video-', '');
+const hasVideo = camera => !!cameraVideo(camera).dataset.lazySrc;
+const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
+const formatNumber = (value, digits = 0) => Number(value).toLocaleString('pt-BR', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+const storage = {
+    get: key => { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set: (key, value) => { try { localStorage.setItem(key, value); } catch (e) { /* sem armazenamento: a preferência vale só nesta visita */ } }
+};
 
-                ctx.restore();
-            }
-        };
+function formatElapsed(seconds) {
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor(total % 3600 / 60);
+    const remaining = total % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+}
 
-        // Register the plugin globally
-        Chart.register(playheadPlugin);
+function startMs(trip) {
+    return TripModel.parseUtc(trip.start_timestamp);
+}
 
-        function initializeSyncState() {
-            // Load saved sync mode from localStorage
-            const savedMode = localStorage.getItem('syncMode') || 'linked';
-            syncState.mode = savedMode;
+/* "HH:MM:SS" no horário real do ponto; sem data de início, cai para o tempo decorrido */
+function clockAt(trip, index) {
+    const ms = TripModel.wallClockAt(trip, index);
+    return ms === null ? formatElapsed(TripModel.elapsedAt(trip, index)) : TripModel.formatClock(ms);
+}
 
-            // Create sync mode toggle button
-            const syncToggle = document.createElement('div');
-            syncToggle.id = 'sync-mode-toggle';
-            syncToggle.setAttribute('role', 'group');
-            syncToggle.setAttribute('aria-labelledby', 'sync-mode-label');
-            syncToggle.innerHTML = `
-                <span id="sync-mode-label" style="font-weight:600; margin-right:10px">🔄 Sincronização:</span>
-                <button id="sync-independent" class="sync-btn" type="button">
-                    🎬 Independente
-                </button>
-                <button id="sync-linked" class="sync-btn" type="button">
-                    🔗 Sincronizado
-                </button>
-            `;
+function dayLabel(ms) {
+    return capitalize(new Date(ms).toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'}));
+}
 
-            // Add to page if not exists
-            const container = document.querySelector('.container');
-            const existingToggle = document.getElementById('sync-mode-toggle');
-            if (existingToggle) {
-                existingToggle.remove();
-            }
-            container.insertBefore(syncToggle, document.getElementById('app-content'));
+function tripSubtitle(trip) {
+    const first = TripModel.wallClockAt(trip, 0);
+    if (first === null) return trip.label || '';
+    const last = trip.points.length - 1;
+    return `${dayLabel(first)}, ${clockAt(trip, 0).slice(0, 5)} às ${clockAt(trip, last).slice(0, 5)}`;
+}
 
-            // Update button styles
-            updateSyncModeButtonStyles();
-
-            // Wire up toggle buttons
-            document.getElementById('sync-independent').addEventListener('click', () => setSyncMode('independent'));
-            document.getElementById('sync-linked').addEventListener('click', () => setSyncMode('linked'));
+async function copyText(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const field = document.createElement('textarea');
+            field.value = text;
+            field.style.position = 'fixed';
+            field.style.opacity = '0';
+            document.body.appendChild(field);
+            field.select();
+            const copied = document.execCommand('copy');
+            field.remove();
+            if (!copied) return false;
         }
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
 
-        function setSyncMode(newMode) {
-            syncState.mode = newMode;
-            localStorage.setItem('syncMode', newMode);
-            updateSyncModeButtonStyles();
-            console.log(`Sync mode changed to: ${newMode}`);
+/* ---------- tema ---------- */
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+
+function isDark() {
+    const theme = document.documentElement.dataset.theme;
+    return theme ? theme === 'dark' : darkQuery.matches;
+}
+
+function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function applyTheme() {
+    $('theme-icon').setAttribute('href', isDark() ? '#i-sun' : '#i-moon');
+    if (map) styleMapLayers();   // o visual dos tiles segue o token --tile-filter
+}
+
+function toggleTheme() {
+    const next = isDark() ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    storage.set('theme', next);
+    applyTheme();
+}
+
+/* ---------- popovers ---------- */
+const popovers = [];
+
+function closePopovers() {
+    const tipWrap = $('quality-wrap');
+    // 'dismissed' esconde a dica mesmo com o foco na pílula (:focus-within); some ao sair/entrar de novo
+    if (tipWrap.classList.contains('show') || tipWrap.contains(document.activeElement)) tipWrap.classList.add('dismissed');
+    tipWrap.classList.remove('show');
+    popovers.forEach(({button, panel}) => {
+        if (panel.hidden) return;
+        panel.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+    });
+}
+
+function setupPopover(button, panel, onOpen) {
+    popovers.push({button, panel});
+    button.addEventListener('click', () => {
+        const opening = panel.hidden;
+        closePopovers();
+        if (!opening) return;
+        panel.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        if (onOpen) onOpen();
+    });
+    button.parentElement.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || panel.hidden) return;
+        closePopovers();
+        button.focus();
+    });
+}
+
+/* ---------- cabeçalho e seletor de viagens ---------- */
+function renderHeader(trip) {
+    $('trip-title').textContent = TripModel.tripTitle(trip);
+    $('trip-sub').textContent = tripSubtitle(trip);
+    const stats = [
+        [`${formatNumber(trip.distance_km, 1)} km`, 'distância'],
+        [TripModel.formatDuration(trip.duration_min * 60), 'duração'],
+        [`${formatNumber(trip.max_speed)} km/h`, 'máxima'],
+        [`${formatNumber(trip.avg_speed)} km/h`, 'média']
+    ];
+    $('kpis').innerHTML = stats.map(([value, label]) => `<div><b>${value}</b><span>${label}</span></div>`).join('');
+    document.title = `${TripModel.tripTitle(trip)} — Diário de viagens`;
+    const quality = qualityFor(trip);
+    $('quality-pill').dataset.tone = quality.tone;
+    $('quality-text').textContent = quality.label;
+    $('quality-icon').setAttribute('href', QUALITY_ICONS[quality.tone]);
+    $('quality-tip').textContent = quality.tip;
+}
+
+function renderTripPicker() {
+    const list = $('trip-list');
+    list.textContent = '';
+    const order = trips.map((trip, i) => i).sort((a, b) => (startMs(trips[b]) || 0) - (startMs(trips[a]) || 0));
+    let lastDay = null;
+    order.forEach(i => {
+        const trip = trips[i];
+        const first = TripModel.wallClockAt(trip, 0);
+        const day = first === null ? 'Sem data' : dayLabel(first);
+        if (day !== lastDay) {
+            lastDay = day;
+            const heading = document.createElement('h3');
+            heading.textContent = day;
+            list.appendChild(heading);
         }
-
-        function updateSyncModeButtonStyles() {
-            const indBtn = document.getElementById('sync-independent');
-            const linkBtn = document.getElementById('sync-linked');
-
-            if (indBtn && linkBtn) {
-                indBtn.setAttribute('aria-pressed', String(syncState.mode === 'independent'));
-                linkBtn.setAttribute('aria-pressed', String(syncState.mode !== 'independent'));
-                if (syncState.mode === 'independent') {
-                    indBtn.classList.add('active');
-                    linkBtn.classList.remove('active');
-                } else {
-                    linkBtn.classList.add('active');
-                    indBtn.classList.remove('active');
-                }
-            }
-        }
-
-        async function loadDatabase() {
-            try {
-                const res = await fetch('../data/trips.json');
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-                }
-                const db = await res.json();
-                return db.trips || [];
-            } catch (error) {
-                throw new Error(`Failed to load database: ${error.message}`);
-            }
-        }
-
-        function renderApp(GROUPS) {
-            const appContent = document.getElementById('app-content');
-
-            if (GROUPS.length === 0) {
-                appContent.innerHTML = '<div class="error" role="alert">Nenhuma viagem encontrada. Execute: ./build.sh</div>';
-                return;
-            }
-
-            appContent.innerHTML = `
-                <div class="main">
-                    <div class="sidebar" id="trips-list"></div>
-
-                    <div class="content">
-                        <div>
-                            <div class="card map-card" id="map-card">
-                                <div class="route-tools">
-                                    <button type="button" id="map-fullscreen">Tela cheia</button>
-                                    <button type="button" id="map-follow" aria-pressed="false">Seguir veículo: não</button>
-                                    <button type="button" id="route-start">Marcar início</button>
-                                    <button type="button" id="route-end">Marcar fim</button>
-                                    <button type="button" id="route-gpx">Exportar GPX</button>
-                                    <button type="button" id="route-kml">Exportar KML</button>
-                                    <span id="route-selection" role="status">Selecione início e fim pela linha do tempo e use os botões de marcação</span>
-                                    <span id="route-message" class="route-message" role="status"></span>
-                                </div>
-                                <p style="font-size:12px; color:#555; margin:0 0 8px">GPX e KML exportam apenas a geometria do trecho; ao abrir em outro aplicativo, não há garantia de rota navegável ou de ruas idênticas.</p>
-                                <div id="map" role="region" aria-label="Mapa da viagem"></div>
-                                <input id="trip-timeline" class="timeline" type="range" min="0" value="0" aria-label="Posição na viagem">
-                                <p id="sync-warning" role="status" style="color:#9a4800; font-size:13px; margin-top:5px"></p>
-                                <p id="camera-coverage" role="status" style="color:#9a4800; font-size:13px; margin-top:5px"></p>
-                            </div>
-                            <div id="trip-details"></div>
-                        </div>
-
-                        <div class="charts">
-                            <div class="chart-container">
-                                <div class="chart-title">Velocidade (km/h)</div>
-                                <canvas id="chart-speed" role="img" aria-label="Gráfico de velocidade em km/h ao longo da viagem"></canvas>
-                            </div>
-                            <div class="chart-container">
-                                <div class="chart-title">Altitude (metros)</div>
-                                <canvas id="chart-altitude" role="img" aria-label="Gráfico de altitude em metros ao longo da viagem"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="videos-section">
-                    <div id="videoStatus">
-                        <strong>Estado dos vídeos:</strong> <span id="statusText" class="status-ok">Carregando...</span><br>
-                        <strong>Detalhes:</strong> <span id="notesText">-</span>
-                    </div>
-
-                    <div class="videos-grid">
-                        <div class="video-card">
-                            <h3 id="rear-title">📹 Câmera traseira <span class="video-badge" id="rear-badge">--</span></h3>
-                            <div id="rear-container" style="position: relative;">
-                                <video id="video-rear" controls width="100%" aria-label="Vídeo da câmera traseira">
-                                    Seu navegador não suporta vídeos HTML5.
-                                </video>
-                                <div id="rear-play-btn" aria-hidden="true" onclick="document.getElementById('video-rear').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
-                                </div>
-                                <div id="rear-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
-                                    ⏳ Carregando vídeo...
-                                </div>
-                                <div class="video-path">📂 <span id="rear-path">-</span></div>
-                            </div>
-                            <div id="rear-unavailable" class="video-not-available" style="display:none">📹 Vídeo traseiro indisponível</div>
-                        </div>
-
-                        <div class="video-card">
-                            <h3 id="front-title">📹 Câmera dianteira <span class="video-badge" id="front-badge">--</span></h3>
-                            <div id="front-container" style="position: relative;">
-                                <video id="video-front" controls width="100%" aria-label="Vídeo da câmera dianteira">
-                                    Seu navegador não suporta vídeos HTML5.
-                                </video>
-                                <div id="front-play-btn" aria-hidden="true" onclick="document.getElementById('video-front').play()" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
-                                </div>
-                                <div id="front-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 8px; display: none; z-index: 11;">
-                                    ⏳ Carregando vídeo...
-                                </div>
-                                <div class="video-path">📂 <span id="front-path">-</span></div>
-                            </div>
-                            <div id="front-unavailable" class="video-not-available" style="display:none">📹 Vídeo dianteiro indisponível</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            renderTripList(GROUPS);
-            initializeRouteTools();
-            if (GROUPS.length > 0) {
-                selectTrip(GROUPS, 0);
-            }
-
-            // Initialize sync state management
-            initializeSyncState();
-        }
-
-        function renderTripList(GROUPS) {
-            const list = document.getElementById('trips-list');
-            list.innerHTML = '';
-
-            GROUPS.forEach((group, idx) => {
-                const item = document.createElement('div');
-                item.className = 'trip-item' + (idx === 0 ? ' active' : '');
-                item.innerHTML = `
-                    <div class="trip-date">${group.label}</div>
-                    <div class="trip-meta">${group.distance_km} km • ${group.duration_min} min</div>
-                `;
-                item.setAttribute('role', 'button');
-                item.tabIndex = 0;
-                item.setAttribute('aria-current', idx === 0 ? 'true' : 'false');
-                const activate = () => {
-                    selectTrip(GROUPS, idx);
-                    list.querySelectorAll('.trip-item').forEach((el, i) => el.setAttribute('aria-current', String(i === idx)));
-                };
-                item.onclick = activate;
-                item.addEventListener('keydown', event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        activate();
-                    }
-                });
-                list.appendChild(item);
-            });
-        }
-
-        function updateRouteSelection() {
-            const status = document.getElementById('route-selection');
-            if (!status) return;
-            const routeMessage = document.getElementById('route-message');
-            if (routeMessage) routeMessage.textContent = '';
-            const describe = index => {
-                if (index === null || !currentGroup || !currentGroup.points[index]) return 'não marcado';
-                const seconds = currentGroup.points[index][5];
-                return Number.isFinite(seconds) && seconds >= 0 ? formatElapsed(seconds) : `ponto ${index + 1}`;
-            };
-            status.textContent = routeStart === null || routeEnd === null
-                ? `Início: ${describe(routeStart)} · Fim: ${describe(routeEnd)}`
-                : `Trecho: ${describe(Math.min(routeStart, routeEnd))} a ${describe(Math.max(routeStart, routeEnd))}`;
-            if (selectionLayer && currentMap) currentMap.removeLayer(selectionLayer);
-            selectionLayer = null;
-            if (currentMap && currentGroup && routeStart !== null && routeEnd !== null) {
-                const points = currentGroup.points.slice(Math.min(routeStart, routeEnd), Math.max(routeStart, routeEnd) + 1);
-                selectionLayer = L.polyline(points.map(p => [p[0], p[1]]), {color: '#ed6c02', weight: 6}).addTo(currentMap);
-            }
-        }
-
-        function formatElapsed(seconds) {
-            const total = Math.max(0, Math.floor(seconds));
-            const hours = Math.floor(total / 3600);
-            const minutes = Math.floor(total % 3600 / 60);
-            const remaining = total % 60;
-            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
-        }
-
-        function initializeRouteTools() {
-            document.getElementById('map-follow').addEventListener('click', event => {
-                followVehicle = !followVehicle;
-                event.currentTarget.setAttribute('aria-pressed', String(followVehicle));
-                event.currentTarget.textContent = `Seguir veículo: ${followVehicle ? 'sim' : 'não'}`;
-            });
-            document.getElementById('map-fullscreen').addEventListener('click', () => {
-                const card = document.getElementById('map-card');
-                card.classList.toggle('expanded');
-                document.getElementById('map-fullscreen').textContent = card.classList.contains('expanded') ? 'Sair da tela cheia' : 'Tela cheia';
-                if (currentMap) setTimeout(() => currentMap.invalidateSize(), 100);
-            });
-            document.addEventListener('keydown', e => {
-                const card = document.getElementById('map-card');
-                if (e.key === 'Escape' && card.classList.contains('expanded')) document.getElementById('map-fullscreen').click();
-            });
-            document.addEventListener('fullscreenchange', () => {
-                document.getElementById('map-fullscreen').textContent = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
-                if (currentMap) setTimeout(() => currentMap.invalidateSize(), 100);
-            });
-            document.getElementById('route-start').addEventListener('click', () => { routeStart = currentPlayheadIndex; updateRouteSelection(); });
-            document.getElementById('route-end').addEventListener('click', () => { routeEnd = currentPlayheadIndex; updateRouteSelection(); });
-            document.getElementById('trip-timeline').addEventListener('input', e => {
-                seekToPoint(Number(e.target.value));
-            });
-            document.getElementById('route-gpx').addEventListener('click', () => exportRoute('gpx'));
-            document.getElementById('route-kml').addEventListener('click', () => exportRoute('kml'));
-        }
-
-        function exportRoute(format) {
-            const message = document.getElementById('route-message');
-            if (routeStart === null || routeEnd === null || routeStart === routeEnd) {
-                message.textContent = 'Marque dois pontos diferentes (início e fim) para definir o trecho.';
-                return;
-            }
-            message.textContent = '';
-            const points = currentGroup.points.slice(Math.min(routeStart, routeEnd), Math.max(routeStart, routeEnd) + 1);
-            let text;
-            if (format === 'gpx') {
-                text = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="DDpai" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Trecho DDpai</name><trkseg>' +
-                    points.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>`).join('') + '</trkseg></trk></gpx>';
-            } else {
-                text = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Trecho DDpai</name><LineString><coordinates>' +
-                    points.map(p => `${p[1]},${p[0]}`).join(' ') + '</coordinates></LineString></Placemark></Document></kml>';
-            }
-            const url = URL.createObjectURL(new Blob([text], {type: 'application/xml'}));
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `trecho-${currentGroup.id}.${format}`;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-        }
-
-        function selectTrip(GROUPS, idx) {
-            const group = GROUPS[idx];
-            currentGroup = group;
-            const hasInvalidOffsets = group.points.some((p, i) => i > 0 && p.length >= 6 && p[5] < group.points[i - 1][5]);
-            const baseSyncWarning = group.video_sync && group.video_sync.status === 'ok' ? '' :
-                group.video_sync && group.video_sync.status === 'partial' ? 'Alguns trechos não possuem correspondência de GPS e vídeo.' : hasInvalidOffsets
-                ? 'Os horários do GPS desta viagem têm inconsistências; a posição no mapa e nos gráficos pode não coincidir com os vídeos.'
-                : 'Não há dados suficientes para sincronizar GPS e vídeo nesta viagem.';
-            const confidenceWarning = group.video_sync && group.video_sync.status !== 'unavailable' ? syncConfidenceWarning(group.video_sync) : '';
-            document.getElementById('sync-warning').textContent = [baseSyncWarning, confidenceWarning].filter(Boolean).join(' ');
-            document.getElementById('camera-coverage').textContent = '';
-            currentPlayheadIndex = 0;
-            routeStart = null;
-            routeEnd = null;
-            const timeline = document.getElementById('trip-timeline');
-            timeline.max = Math.max(0, group.points.length - 1);
-            timeline.value = 0;
-            updateRouteSelection();
-
-            // Update sidebar
-            document.querySelectorAll('.trip-item').forEach((el, i) => {
-                el.classList.toggle('active', i === idx);
-            });
-
-            // Update map with idle segment data
-            updateMap(group.points, group.idle_segments || []);
-
-            // Update charts
-            updateCharts(group.points);
-
-            // Update trip details and idle segments
-            updateTripDetails(group);
-
-            // Update videos and attach sync listeners
-            updateVideos(group, idx);
-
-            // Attach sync listeners after videos are loaded
-            setTimeout(() => {
-                const rearVideo = document.getElementById('video-rear');
-                const frontVideo = document.getElementById('video-front');
-                if (rearVideo || frontVideo) {
-                    attachVideoSyncListeners(rearVideo, frontVideo);
-                }
-            }, 100);
-        }
-
-        function attachVideoSyncListeners(rearVideo, frontVideo) {
-            // Attach video timeupdate/seeking listeners to sync with map
-            function onVideoTimeUpdate(e, videoType) {
-                if (syncState.isSyncing || !currentGroup) return;
-
-                // FRONT VIDEO IS BASELINE - only sync to front video in linked mode
-                // This prevents the "bouncing" effect from both videos firing timeupdate
-                if (syncState.mode === 'linked' && syncState.activeVideo && videoType !== syncState.activeVideo) {
-                    return;  // Ignore rear video updates in linked mode, use front only
-                }
-
-                syncState.isSyncing = true;
-                syncState.lastUpdateSource = 'video';
-
-                const videoElement = e.target;
-                const currentTime = videoElement.currentTime;
-                const gps_duration_s = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
-                const points = currentGroup.points;
-
-                if (!gps_duration_s || !points || points.length === 0) {
-                    syncState.isSyncing = false;
-                    return;
-                }
-
-                // Binary search on time_offset_s (points[i][5]); fallback to linear if old trips.json
-                let clampedIndex;
-                if (currentGroup.video_sync) {
-                    clampedIndex = pointAtVideoTime(currentGroup, videoType, currentTime);
-                    if (clampedIndex === null) {
-                        document.getElementById('camera-coverage').textContent = 'GPS indisponível neste momento do vídeo.';
-                        syncState.isSyncing = false;
-                        return;
-                    }
-                    document.getElementById('camera-coverage').textContent = '';
-                } else if (points.length && points[0].length >= 6) {
-                    let lo = 0, hi = points.length - 1;
-                    while (lo < hi) {
-                        const mid = (lo + hi + 1) >> 1;
-                        if (points[mid][5] <= currentTime) lo = mid;
-                        else hi = mid - 1;
-                    }
-                    clampedIndex = lo;
-                } else {
-                    const gpsIndex = Math.floor((currentTime / gps_duration_s) * points.length);
-                    clampedIndex = Math.max(0, Math.min(gpsIndex, points.length - 1));
-                }
-
-                updateMapMarker(clampedIndex);
-                showVideoTimeIndicator(currentTime, gps_duration_s);
-                updateChartsPlayhead(clampedIndex, points);
-
-                // Handle video end
-                if (currentTime >= gps_duration_s - 0.5) {
-                    showVideoEndBadge(currentGroup);
-                }
-
-                syncState.isSyncing = false;
-            }
-
-            // Remove existing listeners to prevent duplicates
-            if (rearVideo) {
-                const newRearVideo = rearVideo.cloneNode(true);
-                rearVideo.parentNode.replaceChild(newRearVideo, rearVideo);
-                rearVideo = newRearVideo;
-            }
-            if (frontVideo) {
-                const newFrontVideo = frontVideo.cloneNode(true);
-                frontVideo.parentNode.replaceChild(newFrontVideo, frontVideo);
-                frontVideo = newFrontVideo;
-            }
-
-            // Attach lazy load listeners to the cloned elements (cloneNode strips event listeners)
-            attachLazyLoadListener(rearVideo);
-            attachLazyLoadListener(frontVideo);
-            syncState.onCoverageChange = (camera, available) => {
-                document.getElementById('camera-coverage').textContent = available ? '' :
-                    `A câmera ${camera === 'front' ? 'dianteira' : 'traseira'} não possui correspondência neste trecho.`;
-            };
-            linkVideos(rearVideo, frontVideo, syncState, () => currentGroup);
-
-            // Attach listeners - USE FRONT VIDEO AS BASELINE (it's larger/slower)
-            if (rearVideo) {
-                rearVideo.addEventListener('playing', () => { document.getElementById('rear-loading').style.display = 'none'; document.getElementById('rear-play-btn').style.display = 'none'; });
-                rearVideo.addEventListener('pause', () => { document.getElementById('rear-play-btn').style.display = 'flex'; });
-                rearVideo.addEventListener('click', () => { syncState.activeVideo = 'rear'; });
-                rearVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'rear'));
-                rearVideo.addEventListener('error', (e) => { console.error('❌ Rear error:', rearVideo.error?.message); });
-            }
-
-            if (frontVideo) {
-                frontVideo.addEventListener('playing', () => { document.getElementById('front-loading').style.display = 'none'; document.getElementById('front-play-btn').style.display = 'none'; });
-                frontVideo.addEventListener('pause', () => { document.getElementById('front-play-btn').style.display = 'flex'; });
-                frontVideo.addEventListener('click', () => { syncState.activeVideo = 'front'; });
-                // FRONT VIDEO IS BASELINE - onVideoTimeUpdate uses it as primary sync source
-                frontVideo.addEventListener('timeupdate', (e) => onVideoTimeUpdate(e, 'front'));
-                frontVideo.addEventListener('error', (e) => { console.error('❌ Front error:', frontVideo.error?.message); });
-            }
-        }
-
-        function updateMapMarker(gpsIndex) {
-            // Update map marker to show GPS point at given index
-            if (!currentGroup || !currentGroup.points || gpsIndex >= currentGroup.points.length) {
-                return;
-            }
-
-            const point = currentGroup.points[gpsIndex];
-            const [lat, lon, speed, altitude, heading] = point;
-
-            const popup = `
-                <b>Posição atual</b><br/>
-                Velocidade: ${speed.toFixed(1)} km/h<br/>
-                Altitude: ${altitude.toFixed(1)} m<br/>
-                Direção: ${heading != null ? heading.toFixed(1) + '°' : 'N/A'}
-            `;
-            if (window.currentMarker) {
-                window.currentMarker.setLatLng([lat, lon]);
-                window.currentMarker.setPopupContent(popup);
-            } else {
-                window.currentMarker = L.marker([lat, lon], {
-                icon: L.icon({
-                    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI4IiBmaWxsPSIjMDA4MEZGIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==',
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16]
-                })
-                }).addTo(currentMap).bindPopup(popup);
-            }
-
-            // Pan map to marker
-            if (followVehicle) currentMap.panTo([lat, lon], {animate: false});
-        }
-
-        function showVideoTimeIndicator(currentTime, totalTime) {
-            // Show current video time on map as overlay
-            if (!window.timeIndicator) {
-                window.timeIndicator = L.control({position: 'topleft'});
-                window.timeIndicator.onAdd = function(map) {
-                    let div = L.DomUtil.create('div', 'info');
-                    div.id = 'video-time-indicator';
-                    return div;
-                };
-                window.timeIndicator.addTo(currentMap);
-            }
-
-            const indicator = document.getElementById('video-time-indicator');
-            if (indicator) {
-                const timeStr = `${Math.floor(currentTime / 60)}:${String(Math.floor(currentTime % 60)).padStart(2, '0')}`;
-                const totalStr = `${Math.floor(totalTime / 60)}:${String(Math.floor(totalTime % 60)).padStart(2, '0')}`;
-                indicator.innerHTML = `<b>▶ Vídeo:</b>${timeStr} / ${totalStr}`;
-            }
-        }
-
-        function showVideoEndBadge(group) {
-            // Show badge when video ends before GPS data ends
-            const endTime = group.video_duration_s || (group.duration_min * 60);
-            const endTimeStr = `${Math.floor(endTime / 60)}:${String(Math.floor(endTime % 60)).padStart(2, '0')}`;
-
-            if (!window.endBadge) {
-                window.endBadge = L.control({position: 'topright'});
-                window.endBadge.onAdd = function(map) {
-                    let div = L.DomUtil.create('div');
-                    div.id = 'video-end-badge';
-                    div.setAttribute('role', 'status');
-                    return div;
-                };
-                window.endBadge.addTo(currentMap);
-            }
-
-            const badge = document.getElementById('video-end-badge');
-            if (badge) {
-                badge.innerHTML = `⚠️ <b>Vídeo termina em ${endTimeStr}</b>`;
-            }
-        }
-
-        function initializeMapCoordinateControl() {
-            if (window.mapCoordinateControl) return;
-
-            window.mapCoordinateControl = L.control({position: 'bottomleft'});
-            window.mapCoordinateControl.onAdd = function() {
-                const div = L.DomUtil.create('div', 'leaflet-control map-coordinate-control');
-                div.id = 'map-coordinate-control';
-                div.innerHTML = `
-                    <strong>Coordenada clicada</strong>
-                    <span id="map-coordinate-value">Clique no mapa</span>
-                    <button id="copy-map-coordinate" type="button" disabled>Copiar</button>
-                `;
-                L.DomEvent.disableClickPropagation(div);
-                L.DomEvent.disableScrollPropagation(div);
-                return div;
-            };
-            window.mapCoordinateControl.addTo(currentMap);
-
-            document.getElementById('copy-map-coordinate').addEventListener('click', copyMapCoordinate);
-        }
-
-        function setMapCoordinate(lat, lon) {
-            const coordinate = `${decimalToDms(lat, 'lat')}, ${decimalToDms(lon, 'lon')}`;
-            const value = document.getElementById('map-coordinate-value');
-            const button = document.getElementById('copy-map-coordinate');
-            if (value) value.textContent = coordinate;
-            if (button) {
-                button.disabled = false;
-                button.textContent = 'Copiar';
-                button.dataset.coordinate = coordinate;
-            }
-        }
-
-        function resetMapCoordinate() {
-            const value = document.getElementById('map-coordinate-value');
-            const button = document.getElementById('copy-map-coordinate');
-            if (value) value.textContent = 'Clique no mapa';
-            if (button) {
-                button.disabled = true;
-                button.textContent = 'Copiar';
-                delete button.dataset.coordinate;
-            }
-        }
-
-        function decimalToDms(value, axis) {
-            const absolute = Math.abs(value);
-            const degrees = Math.floor(absolute);
-            const minutesDecimal = (absolute - degrees) * 60;
-            const minutes = Math.floor(minutesDecimal);
-            const seconds = ((minutesDecimal - minutes) * 60).toFixed(2);
-            const hemisphere = axis === 'lat'
-                ? (value >= 0 ? 'N' : 'S')
-                : (value >= 0 ? 'E' : 'W');
-            return `${degrees}° ${minutes}' ${seconds}\" ${hemisphere}`;
-        }
-
-        async function copyMapCoordinate() {
-            const button = document.getElementById('copy-map-coordinate');
-            const coordinate = button && button.dataset.coordinate;
-            if (!coordinate) return;
-
-            try {
-                if (navigator.clipboard && window.isSecureContext) {
-                    await navigator.clipboard.writeText(coordinate);
-                } else {
-                    const input = document.createElement('textarea');
-                    input.value = coordinate;
-                    input.style.position = 'fixed';
-                    input.style.opacity = '0';
-                    document.body.appendChild(input);
-                    input.select();
-                    document.execCommand('copy');
-                    input.remove();
-                }
-                button.textContent = 'Copiado!';
-            } catch (error) {
-                button.textContent = 'Falhou — selecione o texto';
-            }
-        }
-
-        function updateMap(points, idleSegments = []) {
-            if (!currentMap) {
-                currentMap = L.map('map').setView([-27.5, -48.5], 11);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(currentMap);
-                initializeMapCoordinateControl();
-            }
-
-            // Each selected trip owns one layer group. Clearing it prevents routes
-            // from previously selected sidebar items remaining on the map.
-            if (currentRouteLayer) {
-                currentRouteLayer.clearLayers();
-                currentMap.removeLayer(currentRouteLayer);
-            }
-            currentRouteLayer = L.layerGroup().addTo(currentMap);
-            resetMapCoordinate();
-
-            if (window.currentMarker) {
-                currentMap.removeLayer(window.currentMarker);
-                window.currentMarker = null;
-            }
-
-            // Create index set for idle ranges
-            let idleRanges = new Set();
-            if (idleSegments && idleSegments.length > 0) {
-                for (let idleSeg of idleSegments) {
-                    for (let i = idleSeg.start_index; i <= idleSeg.end_index; i++) {
-                        idleRanges.add(i);
-                    }
-                }
-            }
-
-            // Draw polyline with idle segments styled differently
-            let currentSegment = [];
-            let isIdle = false;
-
-            for (let i = 0; i < points.length; i++) {
-                let point = points[i];
-                let pointIsIdle = idleRanges.has(i);
-
-                // When idle status changes, draw current segment
-                if (pointIsIdle !== isIdle && currentSegment.length > 0) {
-                    L.polyline(currentSegment, {
-                        color: isIdle ? '#999' : '#0066cc',
-                        opacity: isIdle ? 0.5 : 0.8,
-                        weight: isIdle ? 2 : 3,
-                        dashArray: isIdle ? '5,5' : null,
-                        className: isIdle ? 'idle-segment' : 'active-segment'
-                    }).addTo(currentRouteLayer);
-
-                    currentSegment = [[point[0], point[1]]];
-                    isIdle = pointIsIdle;
-                } else {
-                    currentSegment.push([point[0], point[1]]);
-                }
-            }
-
-            // Draw final segment
-            if (currentSegment.length > 0) {
-                L.polyline(currentSegment, {
-                    color: isIdle ? '#999' : '#0066cc',
-                    opacity: isIdle ? 0.5 : 0.8,
-                    weight: isIdle ? 2 : 3,
-                    dashArray: isIdle ? '5,5' : null,
-                    className: isIdle ? 'idle-segment' : 'active-segment'
-                }).addTo(currentRouteLayer);
-            }
-
-            // Fit bounds to all points
-            const coords = points.map(p => [p[0], p[1]]);
-            const bounds = L.latLngBounds(coords);
-            currentMap.fitBounds(bounds, {padding: [50, 50]});
-
-            // Add map click handler for syncing
-            currentMap.off('click');
-            currentMap.on('click', function(e) {
-                if (syncState.isSyncing) return;
-
-                setMapCoordinate(e.latlng.lat, e.latlng.lng);
-
-                syncState.isSyncing = true;
-                syncState.lastUpdateSource = 'map';
-
-                // Find closest GPS point to click
-                const clickLat = e.latlng.lat;
-                const clickLon = e.latlng.lng;
-
-                let closestIndex = 0;
-                let closestDist = Infinity;
-
-                points.forEach((point, idx) => {
-                    const [lat, lon] = point;
-                    const dist = Math.pow(lat - clickLat, 2) + Math.pow(lon - clickLon, 2);
-                    if (dist < closestDist) {
-                        closestDist = dist;
-                        closestIndex = idx;
-                    }
-                });
-
-                syncState.isSyncing = false;
-                seekToPoint(closestIndex);
-            });
-        }
-
-        // Navigate by index so repeated coordinates remain distinguishable.
-        function seekToPoint(index) {
-            if (!currentGroup || !currentGroup.points[index]) return;
-            const points = currentGroup.points;
-            const gpsDuration = currentGroup.video_duration_s || (currentGroup.duration_min * 60);
-            const defaultTime = points[index].length >= 6 ? points[index][5] : (index / points.length) * gpsDuration;
-            syncState.isSyncing = true;
-            const rearVideo = document.getElementById('video-rear');
-            const frontVideo = document.getElementById('video-front');
-            const targets = syncState.mode === 'linked' ? [rearVideo, frontVideo] :
-                [syncState.activeVideo === 'front' ? frontVideo : rearVideo];
-            const missingCameras = [];
-            for (const video of targets) {
-                const camera = video && video.id === 'video-front' ? 'front' : 'rear';
-                const seekTime = currentGroup.video_sync ? timeForPoint(currentGroup, camera, index) : defaultTime;
-                if (video && video.dataset.lazySrc && seekTime === null) {
-                    missingCameras.push(camera === 'front' ? 'dianteira' : 'traseira');
-                    if (syncState.pauseForMissingCoverage) syncState.pauseForMissingCoverage(video);
-                }
-                if (!video || !video.dataset.lazySrc || !Number.isFinite(seekTime) || seekTime < 0) continue;
-                if (!video.hasAttribute('src')) video.src = video.dataset.lazySrc;
-                video.currentTime = seekTime;
-            }
-            document.getElementById('camera-coverage').textContent = missingCameras.length ?
-                `Sem vídeo ${missingCameras.join(' e ')} para este ponto.` : '';
-            updateMapMarker(index);
-            updateChartsPlayhead(index, points);
-            syncState.isSyncing = false;
-        }
-
-        function updateCharts(points) {
-            const speeds = points.map(p => p[2]);
-            const altitudes = points.map(p => p[3]);
-            const labels = Array.from({length: points.length}, (_, i) => i);
-
-            if (speedChart) {
-                speedChart.destroy();
-            }
-            if (altitudeChart) {
-                altitudeChart.destroy();
-            }
-
-            const ctx1 = document.getElementById('chart-speed').getContext('2d');
-            speedChart = new Chart(ctx1, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Speed (km/h)',
-                        data: speeds,
-                        borderColor: '#FF6B6B',
-                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                        tension: 0.2,
-                        fill: true,
-                        pointRadius: 0,
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (event, elements, chart) => {
-                        const x = chart.scales.x.getValueForPixel(event.x);
-                        if (Number.isFinite(x)) seekToPoint(Math.max(0, Math.min(points.length - 1, Math.round(x))));
-                    },
-                    plugins: {legend: {display: false}, playhead: {}},
-                    scales: {
-                        y: {beginAtZero: true},
-                        x: {display: false}
-                    }
-                }
-            });
-
-            const ctx2 = document.getElementById('chart-altitude').getContext('2d');
-            altitudeChart = new Chart(ctx2, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Altitude (m)',
-                        data: altitudes,
-                        borderColor: '#4ECDC4',
-                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
-                        tension: 0.2,
-                        fill: true,
-                        pointRadius: 0,
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (event, elements, chart) => {
-                        const x = chart.scales.x.getValueForPixel(event.x);
-                        if (Number.isFinite(x)) seekToPoint(Math.max(0, Math.min(points.length - 1, Math.round(x))));
-                    },
-                    plugins: {legend: {display: false}, playhead: {}},
-                    scales: {x: {display: false}}
-                }
-            });
-        }
-
-        function updateChartsPlayhead(pointIndex, points) {
-            // Update playhead position and redraw charts
-            currentPlayheadIndex = Math.max(0, Math.min(pointIndex, points.length - 1));
-            const timeline = document.getElementById('trip-timeline');
-            if (timeline) timeline.value = currentPlayheadIndex;
-            if (timeline && Number.isFinite(points[currentPlayheadIndex][5])) timeline.setAttribute('aria-valuetext', formatElapsed(points[currentPlayheadIndex][5]));
-
-            // Trigger redraw of both charts
-            if (speedChart) {
-                speedChart.draw();
-            }
-            if (altitudeChart) {
-                altitudeChart.draw();
-            }
-        }
-
-        function attachLazyLoadListener(videoElement) {
-            if (!videoElement) return;
-            // Derive loading indicator and play button elements from video id
-            const suffix = videoElement.id.replace('video-', '');
-            const loadingEl = document.getElementById(suffix + '-loading');
-            const playBtnEl = document.getElementById(suffix + '-play-btn');
-
-            // Load video on first play attempt
-            const handlePlayAttempt = () => {
-                if (videoElement.dataset.lazySrc && !videoElement.hasAttribute('src')) {
-                    if (playBtnEl) playBtnEl.style.display = 'none';  // Hide overlay while loading
-                    if (loadingEl) loadingEl.style.display = 'block';
-                    videoElement.src = videoElement.dataset.lazySrc;
-                    console.log('📹 Lazy loading video:', videoElement.dataset.lazySrc);
-                }
-                videoElement.removeEventListener('play', handlePlayAttempt);
-            };
-
-            videoElement.addEventListener('play', handlePlayAttempt);
-        }
-
-        function updateVideos(group, idx) {
-            const rearVideo = document.getElementById('video-rear');
-            const frontVideo = document.getElementById('video-front');
-            const rearContainer = document.getElementById('rear-container');
-            const frontContainer = document.getElementById('front-container');
-            const rearTitle = document.getElementById('rear-title');
-            const frontTitle = document.getElementById('front-title');
-
-            const badge = `${Math.round(group.duration_min)} MIN`;
-
-            // Silent cancellation: remove src attribute entirely (src='' triggers errors)
-            rearVideo.removeAttribute('src');
-            rearVideo.load();
-            frontVideo.removeAttribute('src');
-            frontVideo.load();
-            rearVideo.dataset.lazySrc = '';
-            frontVideo.dataset.lazySrc = '';
-
-            // Reset play button and loading indicator for the new trip
-            const rearPlayBtn = document.getElementById('rear-play-btn');
-            const frontPlayBtn = document.getElementById('front-play-btn');
-            const rearLoadingEl = document.getElementById('rear-loading');
-            const frontLoadingEl = document.getElementById('front-loading');
-            if (rearPlayBtn) rearPlayBtn.style.display = 'flex';
-            if (frontPlayBtn) frontPlayBtn.style.display = 'flex';
-            if (rearLoadingEl) rearLoadingEl.style.display = 'none';
-            if (frontLoadingEl) frontLoadingEl.style.display = 'none';
-
-            // Handle rear video
-            if (group.video_rear) {
-                const rearSrc = '../' + group.video_rear;
-                rearVideo.dataset.lazySrc = rearSrc;  // Store for lazy loading
-                console.log('🎬 Rear video queued (lazy load):', rearSrc);
-                document.getElementById('rear-path').textContent = group.video_rear;
-                document.getElementById('rear-badge').textContent = badge;
-                rearContainer.style.display = 'block';
-                document.getElementById('rear-unavailable').style.display = 'none';
-                rearTitle.classList.remove('video-unavailable');
-            } else {
-                rearVideo.removeAttribute('src');
-                rearContainer.style.display = 'none';
-                document.getElementById('rear-unavailable').style.display = 'block';
-                rearTitle.classList.add('video-unavailable');
-                document.getElementById('rear-badge').textContent = 'N/A';
-            }
-
-            // Handle front video
-            if (group.video_front) {
-                const frontSrc = '../' + group.video_front;
-                frontVideo.dataset.lazySrc = frontSrc;  // Store for lazy loading
-                console.log('📹 Front video queued (lazy load):', frontSrc);
-                document.getElementById('front-path').textContent = group.video_front;
-                document.getElementById('front-badge').textContent = badge;
-                frontContainer.style.display = 'block';
-                document.getElementById('front-unavailable').style.display = 'none';
-                frontTitle.classList.remove('video-unavailable');
-            } else {
-                frontVideo.removeAttribute('src');
-                frontContainer.style.display = 'none';
-                document.getElementById('front-unavailable').style.display = 'block';
-                frontTitle.classList.add('video-unavailable');
-                document.getElementById('front-badge').textContent = 'N/A';
-            }
-
-            // Display video status and notes
-            updateVideoStatus(group);
-
-        }
-
-        function updateVideoStatus(group) {
-            const statusEl = document.getElementById('statusText');
-            const notesEl = document.getElementById('notesText');
-            if (!statusEl || !notesEl) return;
-            const status = group.video_status || 'unknown';
-            const notes = group.video_notes || 'No additional information';
-
-            // Set status with appropriate styling
-            statusEl.textContent = status.toUpperCase();
-            statusEl.className = '';
-
-            if (status === 'ok') {
-                statusEl.classList.add('status-ok');
-            } else if (status.startsWith('ok_with')) {
-                statusEl.classList.add('status-warning');
-            } else if (status.includes('no_') || status === 'merge_failed') {
-                statusEl.classList.add('status-error');
-            }
-
-            // Set notes
-            notesEl.textContent = notes;
-        }
-
-        function updateTripDetails(group) {
-            const detailsDiv = document.getElementById('trip-details');
-            if (!detailsDiv) return;
-            let html = '<h3>Detalhes da viagem</h3>';
-
-            // Basic trip statistics
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Data</span>';
-            html += '<span class="trip-stat-value">' + group.label + '</span>';
-            html += '</div>';
-
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Distância</span>';
-            html += '<span class="trip-stat-value">' + group.distance_km.toFixed(2) + ' km</span>';
-            html += '</div>';
-
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Duração</span>';
-            html += '<span class="trip-stat-value">' + group.duration_min.toFixed(1) + ' min</span>';
-            html += '</div>';
-
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Velocidade máxima</span>';
-            html += '<span class="trip-stat-value">' + group.max_speed.toFixed(1) + ' km/h</span>';
-            html += '</div>';
-
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Velocidade média</span>';
-            html += '<span class="trip-stat-value">' + group.avg_speed.toFixed(1) + ' km/h</span>';
-            html += '</div>';
-
-            html += '<div class="trip-stat">';
-            html += '<span class="trip-stat-label">Pontos GPS</span>';
-            html += '<span class="trip-stat-value">' + (group.points ? group.points.length : 0) + ' registros</span>';
-            html += '</div>';
-
-            // Add idle segment information
-            if (group.idle_segments && group.idle_segments.length > 0) {
-                html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid #eee;">';
-                html += '<h4 style="font-size: 13px; font-weight: 600; color: #555; margin-top: 12px; margin-bottom: 8px;">⏸ Paradas (' + group.idle_segments.length + ')</h4>';
-
-                for (let i = 0; i < group.idle_segments.length; i++) {
-                    let seg = group.idle_segments[i];
-                    html += '<div class="idle-info">';
-                    html += '<strong>Trecho ' + (i + 1) + ':</strong> ' +
-                            (seg.duration_s / 60).toFixed(1) + ' min, ' +
-                            seg.distance_km.toFixed(2) + ' km<br>';
-                    html += '<small>Pontos GPS: ' + (seg.end_index - seg.start_index + 1) + ' registros</small>';
-                    html += '</div>';
-                }
-            } else {
-                html += '<div style="padding: 12px 0; color: #999; font-size: 12px;">Nenhuma parada detectada</div>';
-            }
-
-            detailsDiv.innerHTML = html;
-        }
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const GROUPS = await loadDatabase();
-                renderApp(GROUPS);
-
-                // Resize charts on window resize
-                window.addEventListener('resize', () => {
-                    if (speedChart) speedChart.resize();
-                    if (altitudeChart) altitudeChart.resize();
-                });
-            } catch (error) {
-                document.getElementById('app-content').innerHTML =
-                    `<div class="error">${error.message}</div>`;
-            }
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'trip-item';
+        if (i === tripIndex) item.setAttribute('aria-current', 'true');
+        const thumb = TripModel.routeThumbPath(trip.points, 72, 48, 60);
+        const quality = qualityFor(trip);
+        const span = first === null ? '' : `${clockAt(trip, 0).slice(0, 5)} às ${clockAt(trip, trip.points.length - 1).slice(0, 5)}`;
+        item.innerHTML = `<svg class="thumb" viewBox="0 0 72 48" aria-hidden="true"><path d="${thumb}"/></svg>` +
+            `<span><b>${TripModel.tripTitle(trip)}</b><span class="meta">${span ? span + ' · ' : ''}${formatNumber(trip.distance_km, 1)} km · ${TripModel.formatDuration(trip.duration_min * 60)}</span>` +
+            `<span class="qmini" data-tone="${quality.tone}"><svg class="i" aria-hidden="true"><use href="${QUALITY_ICONS[quality.tone]}"/></svg>${quality.label}</span></span>`;
+        item.addEventListener('click', () => {
+            closePopovers();
+            selectTrip(i);
+            $('trip-picker').focus();
         });
-    </script>
+        list.appendChild(item);
+    });
+}
+
+function initialTripIndex(list) {
+    const match = /^#viagem-(.+)$/.exec(location.hash);
+    if (match) {
+        const wanted = decodeURIComponent(match[1]);
+        const found = list.findIndex(trip => String(trip.id) === wanted);
+        if (found >= 0) return found;
+    }
+    let newest = 0;
+    list.forEach((trip, i) => {
+        if ((startMs(trip) || 0) > (startMs(list[newest]) || 0)) newest = i;
+    });
+    return newest;
+}
+
+/* ---------- vídeos (carregamento sob demanda) ---------- */
+function renderCameraNote(camera) {
+    const flags = cameraFlags[camera];
+    const text = flags.nofile ? 'Sem vídeo desta câmera'
+        : flags.error ? 'Este navegador não conseguiu reproduzir o vídeo.'
+        : flags.gap ? `Sem gravação da câmera ${CAMERA_NAMES[camera]} neste ponto da viagem.`
+        : flags.nogps ? 'GPS indisponível neste momento do vídeo' : '';
+    const note = $(camera + '-note');
+    if (note.textContent !== text) note.textContent = text;
+    note.hidden = !text;
+}
+
+function setCameraFlag(camera, flag, on) {
+    if (!!cameraFlags[camera][flag] === on) return;
+    cameraFlags[camera][flag] = on;
+    renderCameraNote(camera);
+}
+
+function hideLoading(video) {
+    const overlay = $(cameraOf(video) + '-loading');
+    if (overlay) overlay.hidden = true;
+}
+
+/* O arquivo só entra no <video> no primeiro play ou seek: são 5 a 23 GB por câmera. */
+function ensureVideoLoaded(video) {
+    if (!video || !video.dataset.lazySrc || video.hasAttribute('src')) return;
+    const overlay = $(cameraOf(video) + '-loading');
+    if (overlay) overlay.hidden = false;
+    video.src = video.dataset.lazySrc;
+}
+
+function attachLazyLoadListener(video) {
+    if (!video) return;
+    video.addEventListener('play', () => ensureVideoLoaded(video));
+}
+
+/* Ao trocar de viagem, descartar o arquivo antigo faz o navegador disparar um `timeupdate` atrasado (posição volta a 0).
+   O `linkVideos` reagiria carregando e posicionando a outra câmera sem ninguém ter pedido. Durante a troca o modo
+   fica "independente" (ele só age no modo sincronizado) e volta ao normal assim que o evento passou ou o usuário age. */
+let videoSwitch = null;
+
+function finishVideoSwitch() {
+    if (!videoSwitch) return;
+    clearTimeout(videoSwitch.timer);
+    syncState.mode = videoSwitch.mode;
+    videoSwitch = null;
+}
+
+function beginVideoSwitch() {
+    if (!videoSwitch) videoSwitch = {mode: syncState.mode, timer: 0};
+    clearTimeout(videoSwitch.timer);
+    videoSwitch.timer = setTimeout(finishVideoSwitch, 500);
+    syncState.mode = 'independent';
+}
+
+function loadTripVideos(trip) {
+    beginVideoSwitch();
+    CAMERAS.forEach(camera => {
+        const video = cameraVideo(camera);
+        // Cancelar sem `src = ''`: isso dispara erro de mídia. Remover o atributo e recarregar é silencioso.
+        delete video.dataset.lazySrc;
+        video.removeAttribute('src');
+        video.load();
+        if (trip['video_' + camera]) video.dataset.lazySrc = '../' + trip['video_' + camera];
+        else delete video.dataset.lazySrc;
+        video.defaultPlaybackRate = currentRate;
+        video.playbackRate = currentRate;
+        hideLoading(video);
+        cameraFlags[camera] = {nofile: !trip['video_' + camera]};
+        renderCameraNote(camera);
+    });
+    const anyVideo = CAMERAS.some(hasVideo);
+    $('stage-empty').hidden = anyVideo;
+    $('stage').hidden = !anyVideo;
+    $('stagectl').hidden = !anyVideo;
+    if (!hasVideo(syncState.activeVideo) && anyVideo) syncState.activeVideo = CAMERAS.find(hasVideo);
+}
+
+function updateLayoutButtons() {
+    const stage = $('stage');
+    if (!CAMERAS.every(hasVideo)) layoutMode = 'pip';   // lado a lado só faz sentido com as duas câmeras
+    const swapped = syncState.activeVideo === 'rear';
+    stage.className = 'stage ' + (layoutMode === 'side' ? (swapped ? 'side rear-main' : 'side') : swapped ? 'pip swapped' : 'pip');
+    const both = CAMERAS.every(hasVideo);
+    $('layout-side').setAttribute('aria-pressed', String(layoutMode === 'side'));
+    $('layout-side').disabled = !both;
+    $('camera-swap').disabled = !both;
+    CAMERAS.forEach(camera => {
+        const cam = $('cam-' + camera);
+        const isMain = camera === syncState.activeVideo;
+        const small = layoutMode === 'pip' && !isMain;
+        cam.classList.toggle('main', isMain);
+        cameraVideo(camera).muted = !isMain;   // só a câmera principal tem áudio
+        if (small && both) {
+            cam.setAttribute('role', 'button');
+            cam.setAttribute('tabindex', '0');
+            cam.setAttribute('aria-label', `Câmera ${CAMERA_NAMES[camera]}. Ativar para ver em tamanho grande`);
+        } else {
+            cam.removeAttribute('role');
+            cam.removeAttribute('tabindex');
+            cam.removeAttribute('aria-label');
+        }
+    });
+}
+
+function swapCamera() {
+    const other = syncState.activeVideo === 'front' ? 'rear' : 'front';
+    if (!hasVideo(other)) return;
+    const previous = cameraVideo(syncState.activeVideo);
+    // modo separado: só a câmera principal é controlada; a anterior não pode ficar tocando solta
+    if (syncState.mode === 'independent' && !previous.paused) previous.pause();
+    syncState.activeVideo = other;
+    updateLayoutButtons();
+    updatePlayButton();
+    if (currentTrip) seekToPoint(playIndex);   // a nova principal pode ter ficado em outro instante (modo separado)
+}
+
+function toggleSideBySide() {
+    layoutMode = layoutMode === 'side' ? 'pip' : 'side';
+    updateLayoutButtons();
+}
+
+function updateSyncLock() {
+    const linked = syncState.mode !== 'independent';
+    const lock = $('sync-lock');
+    lock.setAttribute('aria-pressed', String(linked));
+    lock.title = linked
+        ? 'Câmeras juntas: reproduzir, pausar e pular valem para frente e trás. Ative para soltar a outra câmera.'
+        : 'Câmeras separadas: só a câmera principal acompanha o controle. Ative para juntar de novo.';
+    $('sync-lock-label').textContent = linked ? 'Câmeras juntas' : 'Câmeras separadas';
+    $('sync-lock-icon').setAttribute('href', linked ? '#i-lock' : '#i-unlock');
+    try { localStorage.setItem('syncMode', syncState.mode); } catch (e) { /* sem armazenamento: vale só nesta visita */ }
+}
+
+function toggleSyncMode() {
+    finishVideoSwitch();
+    syncState.mode = syncState.mode === 'independent' ? 'linked' : 'independent';
+    updateSyncLock();
+}
+
+/* ---------- mapa ---------- */
+function mapColors() {
+    return {ink: cssVar('--ink'), ink3: cssVar('--ink-3'), card: cssVar('--card'), blue: cssVar('--blue'), yellow: cssVar('--yellow')};
+}
+
+function styleMapLayers() {
+    if (!mapLayers.base) return;
+    const c = mapColors();
+    mapLayers.casing.setStyle({color: c.card, opacity: .9});
+    mapLayers.base.setStyle({color: c.ink3});
+    mapLayers.done.setStyle({color: c.ink});
+    mapLayers.idle.forEach(layer => layer.setStyle({color: c.blue}));
+    mapLayers.vehicle.setStyle({color: c.ink, fillColor: c.yellow});
+    if (mapLayers.selection) mapLayers.selection.setStyle({color: c.blue});
+}
+
+function initMap() {
+    map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([-27.5, -48.5], 11);
+    L.control.zoom({position: 'topleft', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar'}).addTo(map);
+    L.control.attribution({prefix: false, position: 'bottomright'}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>'}).addTo(map);
+    map.on('click', event => {
+        setMapCoordinate(event.latlng.lat, event.latlng.lng);
+        seekToPoint(nearestPointIndex(event.latlng.lat, event.latlng.lng));
+    });
+}
+
+function nearestPointIndex(lat, lon) {
+    const scale = Math.cos(lat * Math.PI / 180);
+    let best = 0, bestDistance = Infinity;
+    currentTrip.points.forEach((point, i) => {
+        const distance = (point[0] - lat) ** 2 + ((point[1] - lon) * scale) ** 2;
+        if (distance < bestDistance) { bestDistance = distance; best = i; }
+    });
+    return best;
+}
+
+function drawRoute(trip) {
+    if (tripLayer) map.removeLayer(tripLayer);
+    routeLatLngs = trip.points.map(p => [p[0], p[1]]);
+    tripLayer = L.layerGroup().addTo(map);
+    mapLayers.selection = null;
+    const line = (latlngs, options) => L.polyline(latlngs, Object.assign({interactive: false, lineCap: 'round', lineJoin: 'round'}, options)).addTo(tripLayer);
+    mapLayers.casing = line(routeLatLngs, {weight: 9});
+    mapLayers.base = line(routeLatLngs, {weight: 4});
+    mapLayers.idle = (trip.idle_segments || []).map(seg => line(routeLatLngs.slice(seg.start_index, seg.end_index + 1), {weight: 5, dashArray: '4 7', lineCap: 'butt'}));
+    mapLayers.done = line([routeLatLngs[0]], {weight: 4});
+    mapLayers.vehicle = L.circleMarker(routeLatLngs[0], {radius: 8, weight: 3, fillOpacity: 1, interactive: false}).addTo(tripLayer);
+    styleMapLayers();
+    fitRoute();
+}
+
+function fitRoute() {
+    if (routeLatLngs.length) map.fitBounds(L.latLngBounds(routeLatLngs), {padding: [30, 30]});
+}
+
+function drawDone(index) {
+    mapLayers.done.setLatLngs(routeLatLngs.slice(0, index + 1));
+    lastDoneDraw = performance.now();
+}
+
+/* a polyline percorrida é redesenhada no máximo a cada 250 ms; o último ponto sempre chega */
+function updateDone(index) {
+    clearTimeout(doneTimer);
+    const wait = DONE_REDRAW_MS - (performance.now() - lastDoneDraw);
+    if (wait <= 0) drawDone(index);
+    else doneTimer = setTimeout(() => drawDone(index), wait);
+}
+
+function toggleFollow() {
+    followVehicle = !followVehicle;
+    $('map-follow').setAttribute('aria-pressed', String(followVehicle));
+    if (followVehicle && mapLayers.vehicle) map.setView(mapLayers.vehicle.getLatLng(), Math.max(map.getZoom(), 15), {animate: false});
+}
+
+function toggleMapExpand() {
+    const big = $('main').classList.toggle('map-big');
+    $('map-expand').setAttribute('aria-pressed', String(big));
+    $('map-expand-icon').setAttribute('href', big ? '#i-collapse' : '#i-expand');
+    map.invalidateSize();
+}
+
+/* ---------- capítulos ---------- */
+function chapterDetail(trip, chapter) {
+    if (chapter.detail) return chapter.detail;
+    if (chapter.type === 'start') return 'Início da gravação';
+    if (chapter.type === 'end') return `${formatNumber(trip.distance_km, 1)} km em ${TripModel.formatDuration(trip.duration_min * 60)}`;
+    if (chapter.type === 'max') return 'O momento mais rápido da viagem';
+    if (chapter.endIndex !== undefined) return `Das ${clockAt(trip, chapter.index).slice(0, 5)} às ${clockAt(trip, chapter.endIndex).slice(0, 5)}`;
+    return '';
+}
+
+function renderChapters(chapters) {
+    const list = $('chapters');
+    list.textContent = '';
+    lastChapter = -1;
+    chapters.forEach((chapter, n) => {
+        const item = document.createElement('li');
+        item.dataset.type = chapter.type;
+        item.dataset.n = String(n);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.innerHTML = `<span class="dot"><svg class="i" aria-hidden="true"><use href="#i-${CHAPTER_ICONS[chapter.type] || 'flag'}"/></svg></span>` +
+            `<span><b></b><p></p></span><time></time>`;
+        button.querySelector('b').textContent = chapter.title;
+        button.querySelector('p').textContent = chapterDetail(currentTrip, chapter);
+        button.querySelector('time').textContent = clockAt(currentTrip, chapter.index).slice(0, 5);
+        button.addEventListener('click', () => seekToPoint(chapter.index));
+        item.appendChild(button);
+        list.appendChild(item);
+    });
+    list.chapters = chapters;
+}
+
+/* destaca "agora" no último capítulo com índice menor ou igual ao ponto atual */
+function updateChapterNow(index) {
+    const chapters = $('chapters').chapters || [];
+    let current = -1;
+    chapters.forEach((chapter, n) => { if (chapter.index <= index) current = n; });
+    if (current === lastChapter) return;
+    lastChapter = current;
+    $('chapters').querySelectorAll('li').forEach(item => {
+        const on = Number(item.dataset.n) === current;
+        item.classList.toggle('now', on);
+        const title = item.querySelector('b');
+        const tag = title.querySelector('.here');
+        if (on && !tag) {
+            const badge = document.createElement('span');
+            badge.className = 'here';
+            badge.textContent = 'agora';
+            title.appendChild(badge);
+        } else if (!on && tag) {
+            tag.remove();
+        }
+        if (on) item.querySelector('button').setAttribute('aria-current', 'step');
+        else item.querySelector('button').removeAttribute('aria-current');
+    });
+}
+
+/* ---------- posição ---------- */
+function updateCameraGaps(index) {
+    CAMERAS.forEach(camera => {
+        const missing = TripModel.hasFineSync(currentTrip) && hasVideo(camera) && timeForPoint(currentTrip, camera, index) === null;
+        setCameraFlag(camera, 'gap', missing);
+        setCameraFlag(camera, 'nogps', false);   // o mapeamento voltou (ou houve busca)
+    });
+}
+
+function updatePlayhead(index) {
+    if (!currentTrip || !currentTrip.points[index]) return;
+    playIndex = index;
+    const point = currentTrip.points[index];
+    const elapsed = TripModel.elapsedAt(currentTrip, index);
+    const total = timeline ? timeline.total : 1;
+    const clock = clockAt(currentTrip, index);
+    $('clock').textContent = clock;
+    $('elapsed').textContent = `${formatElapsed(elapsed)} de ${formatElapsed(total)}`;
+    $('now-speed').textContent = `${formatNumber(point[2])} km/h`;
+    $('now-alt').textContent = `${formatNumber(point[3])} m`;
+    $('now-km').textContent = `${formatNumber(tripKm[index] || 0, 1)} km`;
+    $('timeline').setAttribute('aria-valuenow', String(index));
+    $('timeline').setAttribute('aria-valuetext', `${clock}, ${formatElapsed(elapsed)} de viagem, ${formatNumber(point[2])} km/h`);
+    if (timeline) {
+        const x = timeline.xOf(index);
+        timeline.playhead.setAttribute('transform', `translate(${x} 0)`);
+        timeline.done.setAttribute('width', String(Math.max(0, x - TL.padL)));
+    }
+    mapLayers.vehicle.setLatLng([point[0], point[1]]);
+    if (followVehicle) map.panTo([point[0], point[1]], {animate: false});
+    updateDone(index);
+    updateChapterNow(index);
+    updateCameraGaps(index);
+}
+
+/* Navega por índice, para que coordenadas repetidas continuem distinguíveis. */
+function seekToPoint(index) {
+    if (!currentTrip || !currentTrip.points[index]) return;
+    finishVideoSwitch();
+    const points = currentTrip.points;
+    const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
+    const defaultTime = points[index].length >= 6 ? points[index][5] : (index / points.length) * gpsDuration;
+    syncState.isSyncing = true;
+    // Modo sincronizado move as duas câmeras; no independente, só a principal.
+    const targets = syncState.mode === 'linked' ? CAMERAS : [syncState.activeVideo];
+    const fine = TripModel.hasFineSync(currentTrip);
+    // Sem gravação da principal neste ponto: no modo junto, a outra câmera não pode seguir tocando sozinha.
+    const mainMissing = fine && hasVideo(syncState.activeVideo) && timeForPoint(currentTrip, syncState.activeVideo, index) === null;
+    targets.forEach(camera => {
+        const video = cameraVideo(camera);
+        if (!video.dataset.lazySrc) return;
+        const seekTime = fine ? timeForPoint(currentTrip, camera, index) : defaultTime;
+        if (seekTime === null || (mainMissing && camera !== syncState.activeVideo)) {
+            if (syncState.pauseForMissingCoverage) syncState.pauseForMissingCoverage(video);
+            if (seekTime === null) return;
+        }
+        if (!Number.isFinite(seekTime) || seekTime < 0) return;
+        ensureVideoLoaded(video);
+        video.currentTime = seekTime;
+    });
+    syncState.isSyncing = false;
+    updatePlayhead(index);
+}
+
+/* ---------- transporte ---------- */
+function updatePlayButton() {
+    const button = $('play');
+    const anyVideo = CAMERAS.some(hasVideo);
+    button.disabled = !anyVideo;
+    const playing = anyVideo && !cameraVideo(syncState.activeVideo).paused;
+    const label = !anyVideo ? 'Viagem sem vídeo' : playing ? 'Pausar' : 'Reproduzir';
+    button.setAttribute('aria-label', label);
+    button.title = !anyVideo ? label : `${label} (espaço)`;
+    $('play-icon').setAttribute('href', playing ? '#i-pause' : '#i-play');
+    const stagePlay = $('stage-play');
+    stagePlay.hidden = !anyVideo || playing;
+    if (stagePlay.hidden && document.activeElement === stagePlay) button.focus();   // foco não se perde ao iniciar
+}
+
+function togglePlay() {
+    finishVideoSwitch();
+    const video = cameraVideo(syncState.activeVideo);
+    if (!video.dataset.lazySrc) return;
+    if (!video.paused) {
+        video.pause();
+        return;
+    }
+    // principal sem gravação neste ponto: tocar a faria voltar ao instante antigo; a nota já explica
+    if (currentTrip && TripModel.hasFineSync(currentTrip) && timeForPoint(currentTrip, syncState.activeVideo, playIndex) === null) return;
+    ensureVideoLoaded(video);
+    const started = video.play();
+    if (started && started.catch) started.catch(() => updatePlayButton());
+}
+
+function nudge(seconds) {
+    if (!currentTrip) return;
+    seekToPoint(TripModel.nudgeIndex(currentTrip, playIndex, seconds));
+}
+
+function setRate(rate) {
+    currentRate = rate;
+    CAMERAS.forEach(camera => {
+        // o navegador volta ao padrão ao carregar um arquivo novo: guardar nos dois
+        cameraVideo(camera).defaultPlaybackRate = rate;
+        cameraVideo(camera).playbackRate = rate;
+    });
+    document.querySelectorAll('[data-rate]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.rate) === rate)));
+}
+
+/* O vídeo da câmera principal comanda a posição; a outra só acompanha pelo `linkVideos`. */
+function onVideoTimeUpdate(event, camera) {
+    if (!currentTrip || videoSwitch || scrubbing || syncState.isSyncing || camera !== syncState.activeVideo) return;
+    const time = event.target.currentTime;
+    const points = currentTrip.points;
+    const gpsDuration = currentTrip.video_duration_s || (currentTrip.duration_min * 60);
+    if (!gpsDuration || points.length === 0) return;
+    let index;
+    if (TripModel.hasFineSync(currentTrip)) {
+        index = pointAtVideoTime(currentTrip, camera, time);
+        if (index === null) {
+            setCameraFlag(camera, 'nogps', true);   // há imagem, mas nenhum ponto de GPS próximo
+            return;
+        }
+    } else if (points[0].length >= 6) {
+        index = TripModel.indexAtElapsed(currentTrip, time);
+    } else {
+        index = Math.max(0, Math.min(Math.floor((time / gpsDuration) * points.length), points.length - 1));
+    }
+    syncState.isSyncing = true;
+    syncState.lastUpdateSource = 'video';
+    updatePlayhead(index);
+    syncState.isSyncing = false;
+}
+
+function handleShortcut(event) {
+    if (event.defaultPrevented) return;   // outro controle já tratou a tecla
+    const target = event.target;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (key === ' ' && target.tagName === 'BUTTON') return;                // o botão focado age com o espaço
+    if (key !== 'Escape' && target.closest && target.closest('.pop')) return;  // setas e letras navegam dentro do popover
+    const step = event.shiftKey ? 60 : 10;
+    switch (key) {
+        case ' ': case 'k': event.preventDefault(); togglePlay(); break;
+        case 'j': case 'ArrowLeft': event.preventDefault(); nudge(-step); break;
+        case 'l': case 'ArrowRight': event.preventDefault(); nudge(step); break;
+        case 'i': markRoutePoint('start'); break;
+        case 'o': markRoutePoint('end'); break;
+        case 'm': toggleMapExpand(); break;
+        case 'c': swapCamera(); break;
+        case 'Escape': closePopovers(); break;
+        default: break;
+    }
+}
+
+/* ---------- linha do tempo ---------- */
+const svgEl = (tag, attrs = {}, parent = null) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.entries(attrs).forEach(([name, value]) => el.setAttribute(name, String(value)));
+    if (parent) parent.appendChild(el);
+    return el;
+};
+const round1 = value => Math.round(value * 10) / 10;
+
+/* "Parada 5 min", "140 km/h"... curto o bastante para caber na estação */
+function stationLabel(chapter) {
+    switch (chapter.type) {
+        case 'stop': return chapter.title.replace('Parada de', 'Parada');
+        case 'max': return chapter.title.replace('Velocidade máxima ', '');
+        case 'climb': return 'Subida';
+        case 'descent': return 'Descida';
+        case 'gap': return 'Sem vídeo';
+        default: return chapter.title;
+    }
+}
+
+function seriesPaths(xs, values, top, height, low, high) {
+    const range = Math.max(1e-6, high - low);
+    const pts = values.map((v, k) => `${round1(xs[k])},${round1(top + height - ((v - low) / range) * height)}`);
+    const base = round1(top + height);
+    return {
+        line: 'M' + pts.join(' L'),
+        area: `M${round1(xs[0])},${base} L${pts.join(' L')} L${round1(xs[xs.length - 1])},${base} Z`
+    };
+}
+
+function axisStepMinutes(totalSeconds, plotWidth) {
+    const steps = [1, 2, 5, 10, 15, 30, 60, 120, 240];
+    return steps.find(minutes => plotWidth / (totalSeconds / (minutes * 60)) >= 56) || 240;
+}
+
+function renderTimeline() {
+    const host = $('timeline');
+    host.textContent = '';
+    timeline = null;
+    if (!currentTrip) return;
+    const trip = currentTrip;
+    const n = trip.points.length;
+    const width = Math.max(320, Math.round(host.clientWidth));
+    const plotW = width - TL.padL - TL.padR;
+    const total = Math.max(1, TripModel.elapsedAt(trip, n - 1));
+    const xOf = index => TL.padL + Math.min(1, TripModel.elapsedAt(trip, index) / total) * plotW;
+    const svg = svgEl('svg', {width, height: TL.height, viewBox: `0 0 ${width} ${TL.height}`, 'aria-hidden': 'false', focusable: 'false'}, host);
+    const defs = svgEl('defs', {}, svg);
+    const hatch = svgEl('pattern', {id: 'tl-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'}, defs);
+    svgEl('line', {x1: 0, y1: 0, x2: 0, y2: 6, style: 'stroke:var(--gapc);stroke-width:3'}, hatch);
+
+    // linha de metrô: base, trechos, percorrido e estações
+    const lineY = TL.line + 7;
+    svgEl('rect', {class: 'tl-base', x: TL.padL, y: lineY - 3, width: plotW, height: 6, rx: 3}, svg);
+    const chapters = TripModel.deriveChapters(trip);
+    chapters.forEach(chapter => {
+        if (chapter.endIndex === undefined) return;
+        const x1 = xOf(chapter.index);
+        svgEl('rect', {class: `tl-seg ${chapter.type}`, x: x1, y: lineY - 4, width: Math.max(6, xOf(chapter.endIndex) - x1), height: 8, rx: 4}, svg);
+    });
+    const done = svgEl('rect', {class: 'tl-done', x: TL.padL, y: lineY - 3, width: 0, height: 6, rx: 3}, svg);
+    chapters.forEach(chapter => {
+        if (chapter.endIndex === undefined) svgEl('circle', {class: 'tl-stn', cx: xOf(chapter.index), cy: lineY, r: 6}, svg);
+    });
+
+    // estações: etiqueta completa, só ícone, ou nada quando falta espaço
+    let freeFrom = TL.padL - 10;
+    chapters.filter(chapter => chapter.type !== 'start' && chapter.type !== 'end').forEach(chapter => {
+        const label = stationLabel(chapter);
+        const cx = xOf(chapter.index);
+        const full = 7 + 15 + 5 + label.length * 7.4 + 10;
+        const wide = Math.min(Math.max(cx - full / 2, freeFrom + 4), width - full - 4);
+        const compact = Math.min(Math.max(cx - 14, freeFrom + 4), width - 32);
+        const useFull = wide >= freeFrom + 4 && wide + full <= width - 2;
+        const left = useFull ? wide : compact;
+        const w = useFull ? full : 28;
+        if (left < freeFrom + 3 || left + w > width) return;
+        freeFrom = left + w;
+        const group = svgEl('g', {class: 'tl-st', 'data-type': chapter.type, 'data-index': chapter.index, 'aria-hidden': 'true'}, svg);
+        svgEl('title', {}, group).textContent = chapter.title;
+        svgEl('rect', {x: left, y: 1, width: w, height: 26, rx: 13}, group);
+        svgEl('use', {class: 'tl-ic', href: `#i-${CHAPTER_ICONS[chapter.type]}`, x: left + 7, y: 6, width: 15, height: 15}, group);
+        if (useFull) svgEl('text', {x: left + 27, y: 18}, group).textContent = label;
+    });
+
+    // faixas de velocidade e altitude: no máximo ~600 amostras, posicionadas pelo horário real
+    const sampleXs = count => Array.from({length: count}, (_, k) => xOf(Math.min(n - 1, Math.floor((k + 0.5) * n / count))));
+    const speeds = TripModel.downsample(trip.points.map(p => p[2] || 0), 600, 'max');
+    const altitudes = TripModel.downsample(trip.points.map(p => p[3] || 0), 600, 'mean');
+    const maxSpeed = Math.max(60, ...speeds);
+    const minAlt = Math.min(...altitudes), maxAlt = Math.max(...altitudes);
+    const sp = seriesPaths(sampleXs(speeds.length), speeds, TL.speed, TL.speedH, 0, maxSpeed);
+    const al = seriesPaths(sampleXs(altitudes.length), altitudes, TL.alt, TL.altH, minAlt, Math.max(maxAlt, minAlt + 1));
+    svg.insertAdjacentHTML('beforeend',
+        `<g role="img" aria-label="Faixa de velocidade ao longo da viagem, máxima de ${formatNumber(Math.max(...speeds))} km/h">` +
+        `<path class="tl-sp-a" d="${sp.area}"/><path class="tl-sp-l" d="${sp.line}"/>` +
+        `<text x="${TL.padL - 8}" y="${TL.speed + TL.speedH / 2 + 4}" text-anchor="end">km/h</text></g>` +
+        `<g role="img" aria-label="Faixa de altitude ao longo da viagem, de ${formatNumber(minAlt)} m a ${formatNumber(maxAlt)} m">` +
+        `<path class="tl-al-a" d="${al.area}"/><path class="tl-al-l" d="${al.line}"/>` +
+        `<text x="${TL.padL - 8}" y="${TL.alt + TL.altH / 2 + 4}" text-anchor="end">altitude</text></g>`);
+
+    // eixo: horário real em passos redondos do relógio local
+    const startMsValue = startMs(trip);
+    const stepMs = axisStepMinutes(total, plotW) * 60000;
+    if (startMsValue !== null) {
+        const zone = -new Date(startMsValue).getTimezoneOffset() * 60000;
+        for (let t = Math.ceil((startMsValue + zone) / stepMs) * stepMs - zone; t <= startMsValue + total * 1000; t += stepMs) {
+            const x = TL.padL + ((t - startMsValue) / 1000 / total) * plotW;
+            if (x < TL.padL + 18 || x > width - TL.padR - 18) continue;
+            svgEl('line', {class: 'tl-tick', x1: x, x2: x, y1: TL.axis - 4, y2: TL.axis}, svg);
+            svgEl('text', {x, y: TL.axis + 12, 'text-anchor': 'middle'}, svg).textContent = TripModel.formatClock(t).slice(0, 5);
+        }
+    }
+
+    const playhead = svgEl('g', {class: 'tl-play'}, svg);
+    svgEl('rect', {x: -1.5, y: TL.line + 14, width: 3, height: TL.axis - TL.line - 18, rx: 1.5}, playhead);
+    svgEl('circle', {cx: 0, cy: lineY, r: 8}, playhead);
+    timeline = {width, plotW, total, xOf, playhead, done};
+    host.setAttribute('aria-valuemax', String(Math.max(0, n - 1)));
+    layoutSelection();
+    updatePlayhead(playIndex);
+}
+
+function indexFromPointer(event) {
+    const box = $('timeline').getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - box.left - TL.padL) / timeline.plotW));
+    return TripModel.indexAtElapsed(currentTrip, fraction * timeline.total);
+}
+
+function wireTimeline() {
+    const host = $('timeline');
+    host.addEventListener('pointerdown', event => {
+        if (!timeline || event.button > 0) return;
+        const station = event.target.closest && event.target.closest('.tl-st');
+        scrubbing = true;
+        host.setPointerCapture(event.pointerId);
+        seekToPoint(station ? Number(station.dataset.index) : indexFromPointer(event));
+    });
+    host.addEventListener('pointermove', event => { if (scrubbing && timeline) seekToPoint(indexFromPointer(event)); });
+    const finish = () => { scrubbing = false; };
+    host.addEventListener('pointerup', finish);
+    host.addEventListener('pointercancel', finish);
+    host.addEventListener('keydown', event => {
+        if (event.key === 'Home') { event.preventDefault(); seekToPoint(0); }
+        if (event.key === 'End') { event.preventDefault(); seekToPoint(currentTrip.points.length - 1); }
+    });
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+        const width = Math.round(host.clientWidth);
+        if (width === lastWidth || !currentTrip) return;
+        lastWidth = width;
+        renderTimeline();
+    }).observe(host);
+}
+
+/* ---------- trecho ---------- */
+function routeBounds() {
+    if (routeStart === null || routeEnd === null) return null;
+    return {from: Math.min(routeStart, routeEnd), to: Math.max(routeStart, routeEnd)};
+}
+
+function layoutSelection() {
+    const bounds = routeBounds();
+    const visible = !!bounds && !!timeline && bounds.from !== bounds.to;
+    $('sel-layer').hidden = !visible;
+    if (!visible) return;
+    const x1 = timeline.xOf(bounds.from), x2 = timeline.xOf(bounds.to);
+    $('sel-range').style.left = x1 + 'px';
+    $('sel-range').style.width = Math.max(2, x2 - x1) + 'px';
+    $('sel-start').style.left = x1 + 'px';
+    $('sel-end').style.left = x2 + 'px';
+    const last = String(currentTrip.points.length - 1);
+    [['sel-start', bounds.from], ['sel-end', bounds.to]].forEach(([id, index]) => {
+        const handle = $(id);
+        handle.setAttribute('aria-valuemax', last);
+        handle.setAttribute('aria-valuenow', String(index));
+        handle.setAttribute('aria-valuetext', clockAt(currentTrip, index));
+    });
+}
+
+function updateRouteSelection() {
+    $('route-message').textContent = '';
+    const bounds = routeBounds();
+    const hasRange = !!bounds && bounds.from !== bounds.to;
+    const short = index => clockAt(currentTrip, index).slice(0, 5);
+    let chip = 'Selecionar trecho';
+    if (hasRange) chip = `Trecho ${short(bounds.from)}–${short(bounds.to)}`;
+    else if (routeStart !== null || routeEnd !== null) chip = routeStart !== null ? `Início ${short(routeStart)}, falta o fim` : `Fim ${short(routeEnd)}, falta o início`;
+    $('route-chip-text').textContent = chip;
+    $('route-chip').classList.toggle('has', hasRange);
+    if (hasRange) {
+        const seconds = TripModel.elapsedAt(currentTrip, bounds.to) - TripModel.elapsedAt(currentTrip, bounds.from);
+        $('route-range').textContent = `${clockAt(currentTrip, bounds.from)} às ${clockAt(currentTrip, bounds.to)}`;
+        $('route-summary').textContent = `${TripModel.formatDuration(seconds)} e ${formatNumber((tripKm[bounds.to] || 0) - (tripKm[bounds.from] || 0), 1)} km`;
+    } else {
+        $('route-range').textContent = 'Nenhum trecho marcado';
+        $('route-summary').textContent = 'Marque o início e o fim para rever ou exportar um trecho. Atalhos: I e O.';
+    }
+    layoutSelection();
+    if (mapLayers.selection) {
+        tripLayer.removeLayer(mapLayers.selection);
+        mapLayers.selection = null;
+    }
+    if (hasRange) {
+        mapLayers.selection = L.polyline(routeLatLngs.slice(bounds.from, bounds.to + 1), {interactive: false, weight: 9, opacity: .5, lineCap: 'round', lineJoin: 'round', color: mapColors().blue}).addTo(tripLayer);
+        mapLayers.vehicle.bringToFront();
+    }
+}
+
+function markRoutePoint(which) {
+    if (!currentTrip) return;
+    if (which === 'start') routeStart = playIndex;
+    else routeEnd = playIndex;
+    if (routeStart !== null && routeEnd !== null && routeStart > routeEnd) [routeStart, routeEnd] = [routeEnd, routeStart];
+    updateRouteSelection();
+}
+
+function clearRoute() {
+    routeStart = null;
+    routeEnd = null;
+    updateRouteSelection();
+}
+
+/* alças da seleção: nunca se cruzam */
+function setRouteHandle(which, index) {
+    const last = currentTrip.points.length - 1;
+    let value = Math.max(0, Math.min(last, index));
+    if (which === 'start' && routeEnd !== null) value = Math.min(value, routeEnd - 1);
+    if (which === 'end' && routeStart !== null) value = Math.max(value, routeStart + 1);
+    if (which === 'start') routeStart = Math.max(0, value);
+    else routeEnd = Math.min(last, value);
+    updateRouteSelection();
+}
+
+function exportRoute(format) {
+    const message = $('route-message');
+    if (routeStart === null || routeEnd === null || routeStart === routeEnd) {
+        message.textContent = 'Marque dois pontos diferentes (início e fim) para definir o trecho.';
+        return;
+    }
+    const bounds = routeBounds();
+    const points = currentTrip.points.slice(bounds.from, bounds.to + 1);
+    const text = format === 'gpx' ? TripModel.buildGpx(points) : TripModel.buildKml(points);
+    const stamp = index => clockAt(currentTrip, index).slice(0, 5).replace(':', '');
+    const name = `trecho-${currentTrip.id}-${stamp(bounds.from)}-${stamp(bounds.to)}.${format}`;
+    const url = URL.createObjectURL(new Blob([text], {type: 'application/xml'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message.textContent = `Trecho exportado: ${name}`;
+}
+
+function wireSelectionHandles() {
+    [['sel-start', 'start'], ['sel-end', 'end']].forEach(([id, which]) => {
+        const handle = $(id);
+        let dragging = false;
+        handle.addEventListener('pointerdown', event => {
+            dragging = true;
+            handle.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        handle.addEventListener('pointermove', event => { if (dragging && timeline) setRouteHandle(which, indexFromPointer(event)); });
+        const stop = () => { dragging = false; };
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+        handle.addEventListener('keydown', event => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            event.stopPropagation();
+            const bounds = routeBounds();
+            if (!bounds) return;
+            const direction = event.key === 'ArrowLeft' ? -1 : 1;
+            const current = which === 'start' ? bounds.from : bounds.to;
+            const seconds = TripModel.elapsedAt(currentTrip, current) + direction * (event.shiftKey ? 10 : 1);
+            let index = TripModel.indexAtElapsed(currentTrip, seconds);
+            if (index === current) index += direction;
+            setRouteHandle(which, index);
+        });
+    });
+}
+
+/* ---------- coordenada ---------- */
+function setMapCoordinate(lat, lon) {
+    const coordinate = `${TripModel.decimalToDms(lat, 'lat')}, ${TripModel.decimalToDms(lon, 'lon')}`;
+    $('map-coordinate-value').textContent = coordinate;
+    $('copy-map-coordinate').dataset.coordinate = coordinate;
+    $('copy-map-coordinate-label').textContent = 'Copiar';
+    $('coord-bar').hidden = false;
+}
+
+function resetMapCoordinate() {
+    $('coord-bar').hidden = true;
+    delete $('copy-map-coordinate').dataset.coordinate;
+}
+
+async function copyMapCoordinate() {
+    const button = $('copy-map-coordinate');
+    if (!button.dataset.coordinate) return;
+    const copied = await copyText(button.dataset.coordinate);
+    $('copy-map-coordinate-label').textContent = copied ? 'Copiado!' : 'Não foi possível copiar. Selecione o texto.';
+    setTimeout(() => { $('copy-map-coordinate-label').textContent = 'Copiar'; }, 2500);
+}
+
+function copyCurrentCoordinate() {
+    if (!currentTrip) return;
+    const point = currentTrip.points[playIndex];
+    setMapCoordinate(point[0], point[1]);
+    closePopovers();
+    copyMapCoordinate();
+}
+
+/* ---------- qualidade dos dados ---------- */
+function qualityFor(trip) {
+    const sync = trip.video_sync;
+    if (!sync || sync.status === 'unavailable') {
+        return {label: 'Sem sincronização fina', tone: 'none', tip: 'Posição estimada pela duração do vídeo.'};
+    }
+    const confidenceNote = syncConfidenceWarning(sync);
+    const partialNote = sync.status === 'partial' ? 'Alguns trechos não têm vídeo correspondente ao GPS.' : '';
+    const tip = [partialNote, confidenceNote].filter(Boolean).join(' ');
+    if (sync.confidence === 'low') return {label: 'Sincronização incerta', tone: 'warn', tip};
+    if (sync.confidence === 'medium') return {label: 'Sincronização aproximada', tone: 'warn', tip};
+    if (sync.status === 'partial') return {label: 'Sincronização parcial', tone: 'warn', tip};
+    return {label: 'Vídeo e GPS alinhados', tone: 'ok', tip: 'A posição no mapa acompanha o vídeo segundo a segundo.'};
+}
+
+function renderTechDetails(trip) {
+    const sync = trip.video_sync;
+    const rows = [
+        ['Vídeo dianteiro', trip.video_front || 'sem arquivo'],
+        ['Vídeo traseiro', trip.video_rear || 'sem arquivo'],
+        ['Situação do vídeo', trip.video_status || 'desconhecida'],
+        ['Observações', trip.video_notes || 'nenhuma'],
+        ['Pontos de GPS', formatNumber(trip.points.length)],
+        ['Duração do vídeo', trip.video_duration_s ? `${formatElapsed(trip.video_duration_s)} (GPS: ${formatElapsed(trip.duration_min * 60)})` : 'não informada'],
+        ['Calibração do relógio', sync ? `confiança ${sync.confidence || 'não informada'}, variação típica de ${Number.isFinite(sync.offset_typical_spread_s) ? formatNumber(sync.offset_typical_spread_s, 1) + ' s' : 'não informada'}` : 'sem calibração']
+    ];
+    const list = document.createElement('dl');
+    rows.forEach(([term, value]) => {
+        const dt = document.createElement('dt');
+        const dd = document.createElement('dd');
+        dt.textContent = term;
+        dd.textContent = value;
+        list.append(dt, dd);
+    });
+    $('tech-details').replaceChildren(list);
+}
+
+function togglePanel(button, panel) {
+    const open = panel.hidden;
+    panel.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+}
+
+/* ---------- viagem atual ---------- */
+function selectTrip(index, updateHash = true) {
+    tripIndex = index;
+    currentTrip = trips[index];
+    playIndex = 0;
+    routeStart = null;
+    routeEnd = null;
+    syncState.activeVideo = 'front';
+    tripKm = TripModel.cumulativeKm(currentTrip.points);
+    loadTripVideos(currentTrip);
+    updateLayoutButtons();
+    updatePlayButton();
+    drawRoute(currentTrip);
+    renderHeader(currentTrip);
+    $('now-km-of').textContent = `de ${formatNumber(tripKm[tripKm.length - 1] || 0, 1)} km`;
+    renderChapters(TripModel.deriveChapters(currentTrip));
+    renderTripPicker();
+    renderTimeline();
+    renderTechDetails(currentTrip);
+    resetMapCoordinate();
+    updateRouteSelection();
+    drawDone(0);
+    if (updateHash) location.hash = 'viagem-' + currentTrip.id;
+}
+
+/* ---------- inicialização ---------- */
+async function loadDatabase() {
+    const res = await fetch('../data/trips.json');
+    if (!res.ok) throw new Error(`o servidor respondeu ${res.status} ao buscar data/trips.json`);
+    const db = await res.json();
+    // trilha com menos de 2 pontos não dá rota nem linha do tempo
+    return (db.trips || []).filter(trip => Array.isArray(trip.points) && trip.points.length >= 2);
+}
+
+function showEmptyState() {
+    $('empty-state').hidden = false;
+    $('copy-import').addEventListener('click', async () => {
+        const copied = await copyText($('import-command').textContent);
+        $('copy-import-status').textContent = copied ? 'Comando copiado.' : 'Não foi possível copiar. Selecione o texto e copie.';
+    });
+}
+
+function showFatalState(error) {
+    $('fatal-reason').textContent = `Motivo: ${error && error.message ? error.message : 'erro desconhecido'}.`;
+    $('fatal-state').hidden = false;
+}
+
+function wireControls() {
+    setupPopover($('trip-picker'), $('trip-popover'), () => {
+        const current = $('trip-list').querySelector('[aria-current]') || $('trip-list').querySelector('button');
+        if (current) current.focus();
+    });
+    document.addEventListener('click', event => { if (!event.target.closest('.popwrap, #quality-wrap')) closePopovers(); });
+    $('layout-side').addEventListener('click', toggleSideBySide);
+    $('camera-swap').addEventListener('click', swapCamera);
+    CAMERAS.forEach(camera => {
+        const cam = $('cam-' + camera);
+        cam.addEventListener('click', () => { if (cam.getAttribute('role') === 'button') swapCamera(); });
+        cam.addEventListener('keydown', event => {
+            if (cam.getAttribute('role') !== 'button' || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            event.stopPropagation();   // senão o atalho global também reproduz/pausa
+            swapCamera();
+        });
+    });
+    $('sync-lock').addEventListener('click', toggleSyncMode);
+    $('stage-play').addEventListener('click', togglePlay);
+    $('play').addEventListener('click', togglePlay);
+    $('back10').addEventListener('click', () => nudge(-10));
+    $('fwd10').addEventListener('click', () => nudge(10));
+    document.querySelectorAll('[data-rate]').forEach(button => button.addEventListener('click', () => setRate(Number(button.dataset.rate))));
+    document.addEventListener('keydown', handleShortcut);
+    wireTimeline();
+    wireSelectionHandles();
+    setupPopover($('more-button'), $('more-popover'));
+    setupPopover($('route-chip'), $('route-popover'));
+    $('tech-toggle').addEventListener('click', () => togglePanel($('tech-toggle'), $('tech-details')));
+    $('keys-toggle').addEventListener('click', () => togglePanel($('keys-toggle'), $('keys-help')));
+    $('copy-current-coordinate').addEventListener('click', copyCurrentCoordinate);
+    $('copy-map-coordinate').addEventListener('click', copyMapCoordinate);
+    $('route-mark-start').addEventListener('click', () => markRoutePoint('start'));
+    $('route-mark-end').addEventListener('click', () => markRoutePoint('end'));
+    $('route-gpx').addEventListener('click', () => exportRoute('gpx'));
+    $('route-kml').addEventListener('click', () => exportRoute('kml'));
+    $('route-clear').addEventListener('click', clearRoute);
+    $('quality-pill').addEventListener('click', () => {
+        const wrap = $('quality-wrap');
+        const wasOpen = wrap.classList.contains('show');
+        closePopovers();
+        if (wasOpen) return;
+        wrap.classList.remove('dismissed');
+        wrap.classList.add('show');
+    });
+    ['mouseenter', 'focusout'].forEach(name => $('quality-wrap').addEventListener(name, () => $('quality-wrap').classList.remove('dismissed')));
+    document.addEventListener('click', event => { if (!event.target.closest('#quality-wrap')) $('quality-wrap').classList.remove('show'); });
+    $('map-follow').addEventListener('click', toggleFollow);
+    $('map-fit').addEventListener('click', () => {
+        followVehicle = false;
+        $('map-follow').setAttribute('aria-pressed', 'false');
+        fitRoute();
+    });
+    $('map-expand').addEventListener('click', toggleMapExpand);
+    addEventListener('hashchange', () => {
+        const match = /^#viagem-(.+)$/.exec(location.hash);
+        if (!trips.length || !match) return;
+        const wanted = trips.findIndex(trip => String(trip.id) === decodeURIComponent(match[1]));
+        if (wanted >= 0 && wanted !== tripIndex) selectTrip(wanted, false);   // id desconhecido: ignora
+    });
+}
+
+async function init() {
+    $('theme-toggle').addEventListener('click', toggleTheme);
+    darkQuery.addEventListener('change', applyTheme);
+    applyTheme();
+    syncState.mode = storage.get('syncMode') === 'independent' ? 'independent' : 'linked';
+    try {
+        trips = await loadDatabase();
+    } catch (error) {
+        showFatalState(error);
+        return;
+    }
+    if (!trips.length) {
+        showEmptyState();
+        return;
+    }
+    $('app').hidden = false;
+    initMap();
+    attachLazyLoadListener(cameraVideo('front'));
+    attachLazyLoadListener(cameraVideo('rear'));
+    CAMERAS.forEach(camera => {
+        const video = cameraVideo(camera);
+        video.addEventListener('click', () => { if (camera === syncState.activeVideo) togglePlay(); });
+        video.addEventListener('playing', () => hideLoading(video));
+        video.addEventListener('timeupdate', event => onVideoTimeUpdate(event, camera));
+        ['play', 'pause', 'ended'].forEach(name => video.addEventListener(name, updatePlayButton));
+        video.addEventListener('loadeddata', () => { hideLoading(video); setCameraFlag(camera, 'error', false); });
+        video.addEventListener('error', () => {
+            if (!video.hasAttribute('src')) return;
+            hideLoading(video);
+            setCameraFlag(camera, 'error', true);
+        });
+    });
+    // sincronização 'unavailable' (offsets todos nulos): o linkVideos deve ver a viagem sem video_sync e usar o tempo direto
+    linkVideos(cameraVideo('rear'), cameraVideo('front'), syncState,
+        () => (currentTrip && currentTrip.video_sync && !TripModel.hasFineSync(currentTrip) ? {...currentTrip, video_sync: null} : currentTrip));
+    wireControls();
+    updateSyncLock();
+    selectTrip(initialTripIndex(trips), false);
+    history.replaceState(null, '', '#viagem-' + currentTrip.id);   // sem nova entrada no histórico
+}
+
+init();
+</script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # DDpai Z50 Pro Dashcam Extractor
 
-Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera. Automatically detects trips, validates data, and generates an interactive web dashboard with maps and real-time charts.
+Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera. Automatically detects trips, validates data, and generates an interactive trip detail screen with a map, a metro-line timeline and linked dashcam videos.
 
 ## Features
 
@@ -8,7 +8,7 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
 - **Trip Detection** — Automatically group consecutive recordings by 30-minute gap threshold
 - **Trip Validation** — Check speed > 0 km/h, altitude coverage, and matching video counts
 - **Video Merging** — Concatenate rear/front videos using stream copy, with H.264 re-encoding as a fallback
-- **Interactive Dashboard** — Web UI with Leaflet.js maps, Chart.js speed/altitude graphs, and linked video players
+- **Interactive Dashboard** — Trip detail screen ("Estúdio de viagem") with Leaflet.js map, chapters, an SVG metro-line timeline for speed/altitude, single transport controls and linked front/rear video
 - **Parallel Build** — Optional 2.5–3.5× speedup for long archives
 
 ## Requirements
@@ -19,7 +19,7 @@ Extract GPS data and merge dashcam videos from a DDpai Z50 Pro dashboard camera.
   # Verify FFmpeg installation
   ffmpeg -codecs | grep h264
   ```
-- **Modern browser** (Leaflet.js, Chart.js, HTML5 video)
+- **Modern browser** (Leaflet.js, inline SVG, HTML5 video)
 - **~15 GB disk space** for merged videos + source files
 
 ## Quick Start
@@ -104,23 +104,41 @@ Merge rear/front videos (stream copy or H.264 fallback)
   ↓ [Write data/trips.json]
 JSON database (GPS points, stats, video paths)
   ↓ [web/index.html]
-Browser: Leaflet map, Chart.js graphs, video players
+Browser: Leaflet map, SVG timeline, video players
 ```
 
 ## Video-GPS Synchronization
 
 ### Features
 - **Bidirectional sync:** Play/scrub video → map updates | Click map → video seeks
-- **Switchable modes:** Linked (both videos together) or Independent (each syncs separately)
-- **Gap handling:** Gracefully handles when video is shorter/longer than GPS data
+- **Switchable modes:** lock button "Câmeras juntas" (both videos together) or "Câmeras separadas" (only the main camera follows the map/timeline); one main camera, the other as picture-in-picture or side by side
+- **Gap handling:** Cameras without footage for a GPS point show a "Sem gravação…" note and a "Sem vídeo" chapter; the map stays interactive
 - **Real-time visualization:** See playback position on map with time indicator
 
 ### Usage
 1. Open dashboard: `./run.sh` → http://localhost:8765/web/
 2. Select a trip with video
-3. Use sync mode buttons: "🔗 Linked" or "🎬 Independent"
+3. Use the sync padlock in the timeline bar: "Câmeras juntas" (locked) or "Câmeras separadas" (unlocked)
 4. Play video to see map follow playback
 5. Click map to jump video to that GPS point
+
+### Estúdio de viagem
+
+A tela de detalhe abre a viagem de `#viagem-<id>` (ou a mais recente). Os capítulos ficam em lista, a linha do
+tempo SVG mostra velocidade e altitude com o trecho selecionável, e o botão "Trocar" alterna a câmera principal.
+
+Atalhos de teclado (ignorados quando o foco está em campo de texto):
+
+| Tecla | Ação |
+|---|---|
+| Espaço / K | Reproduzir / pausar |
+| ← / → | Voltar / avançar 10 s |
+| Shift + ← / → | Voltar / avançar 60 s |
+| J / L | Voltar / avançar 10 s |
+| I / O | Marcar início / fim do trecho |
+| M | Ampliar o mapa (troca mapa e vídeo de lugar) |
+| C | Trocar a câmera principal |
+| Esc | Fechar popovers |
 
 ### Video Duration Validation
 During build, the system:
@@ -278,4 +296,4 @@ MIT License © 2026 Fabiano Silva. See [LICENSE](LICENSE) for details.
 - NMEA parsing for GPS data extraction
 - FFmpeg for video concatenation
 - [Leaflet.js](https://leafletjs.com/) for interactive maps
-- [Chart.js](https://www.chartjs.org/) for speed/altitude visualization
+- [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors for map tiles
